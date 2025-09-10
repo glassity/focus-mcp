@@ -1,10 +1,69 @@
-# Python-generated files
+# Python
 __pycache__/
-*.py[oc]
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
 dist/
-wheels/
-*.egg-info
+*.egg-info/
+*.egg
 
-# Virtual environments
+# Virtual Environments
+.env
 .venv
+env/
+venv/
+ENV/
+.python-version
+
+# UV Package Manager
+.uv/
+uv.lock.bak
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data Files
+data/focus-export/
+*.parquet
+*.csv
+*.json.gz
+
+# Temporary Files
+*.tmp
+*.bak
+*.backup
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+*.duckdb.wal
+
+# MCP Server
+mcp_cache/
+.mcp/
+mcp_logs/
+
+# Ruff
+.ruff_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
