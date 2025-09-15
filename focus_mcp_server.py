@@ -1,4 +1,23 @@
 #!/usr/bin/env python3
+"""
+FOCUS MCP Server - A Model Context Protocol server for analyzing cloud billing data.
+
+This server provides tools to query and analyze FOCUS (FinOps Open Cost and Usage Specification)
+compliant billing data using DuckDB. It serves as a bridge between MCP clients (like Claude)
+and cloud cost data stored in Parquet format.
+
+Key Features:
+- Automatic Parquet file discovery and loading
+- Predefined analytical queries for common FinOps use cases
+- Dynamic SQL execution with parameter binding
+- FOCUS schema exploration and data profiling
+
+Architecture:
+- Uses DuckDB for high-performance analytical queries on Parquet files
+- Implements MCP (Model Context Protocol) for AI assistant integration
+- Supports both predefined queries and ad-hoc SQL execution
+- Handles FOCUS billing data standards and conventions
+"""
 
 import os
 from typing import Any, Optional
@@ -9,14 +28,15 @@ from mcp.server.fastmcp import FastMCP
 import focus_config
 from focus_queries import focus_queries
 
-# Initialize server
+# Initialize MCP server with FOCUS-specific instructions
+# FastMCP provides a simplified interface for creating MCP servers
 mcp = FastMCP(
     "focus-mcp-server",
     instructions="""
     # FOCUS Billing Analytics Server
 
     ## Best Practices
-    
+
     - Start with get_data_info to understand the loaded data
     - Use list_use_cases to explore predefined queries
     - Use get_use_case to see details before executing a predefined query, including parameters needed
@@ -31,22 +51,48 @@ mcp = FastMCP(
     """,
 )
 
-# Configuration
+# Configuration - Load from environment variables via focus_config
 DATA_PATH = focus_config.DATA_PATH
 
-# Global connection
+# Global database connection - Singleton pattern for performance
+# DuckDB connections are thread-safe and expensive to create, so we reuse one instance
 db_connection: Optional[duckdb.DuckDBPyConnection] = None
 
 
 def get_db_connection() -> duckdb.DuckDBPyConnection:
-    """Get or create database connection."""
+    """
+    Get or create a DuckDB database connection with FOCUS data loaded.
+
+    This function implements a singleton pattern to ensure we only create one
+    database connection per server instance. The connection is configured with:
+
+    1. httpfs extension for reading remote files (future use)
+    2. A 'focus_data' view that automatically discovers all Parquet files
+       in the configured data directory using Hive partitioning
+
+    The Hive partitioning feature allows DuckDB to automatically understand
+    directory structures like 'year=2024/month=01/' commonly used in cloud
+    data exports, making queries more efficient by enabling partition pruning.
+
+    Returns:
+        DuckDB connection with FOCUS data view ready for querying
+
+    Raises:
+        Exception: If DuckDB fails to initialize or load the data
+    """
     global db_connection
 
     if db_connection is None:
+        # Create new DuckDB connection (in-memory database)
         db_connection = duckdb.connect()
+
+        # Install and load httpfs extension for potential remote file access
+        # This enables reading from S3, GCS, or Azure blob storage in the future
         db_connection.execute("INSTALL httpfs; LOAD httpfs;")
 
-        # Create FOCUS data view
+        # Create a view that aggregates all FOCUS Parquet files
+        # The '**/*.parquet' pattern recursively finds all parquet files
+        # hive_partitioning=true enables automatic partition column inference
         if os.path.exists(DATA_PATH):
             view_query = f"""
                 CREATE OR REPLACE VIEW focus_data AS
@@ -58,17 +104,46 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
 
 
 def format_query_results(rows, columns, limit):
-    """Simple result formatter."""
+    """
+    Format query results into a list of dictionaries for JSON serialization.
+
+    Converts DuckDB query results (list of tuples) into a more usable format
+    for MCP clients. Each row becomes a dictionary with column names as keys.
+
+    Args:
+        rows: Raw query results from DuckDB (list of tuples)
+        columns: Column names from the query
+        limit: Maximum number of rows to return (for truncation)
+
+    Returns:
+        List of dictionaries where each dict represents one row
+    """
     return [dict(zip(columns, row)) for row in rows[:limit]]
 
 
 @mcp.tool()
 async def get_data_info() -> dict[str, Any]:
-    """Get information about loaded FOCUS data."""
+    """
+    Get comprehensive information about the loaded FOCUS billing data.
+
+    This tool provides essential metadata about the billing dataset including:
+    - Data volume and date coverage
+    - Cloud provider breakdown
+    - Service diversity
+    - Total cost aggregation
+    - Schema information
+
+    This is typically the first tool called to understand the scope and
+    structure of the available billing data before running analytical queries.
+
+    Returns:
+        Dictionary containing data summary or error information
+    """
     try:
         conn = get_db_connection()
 
-        # Check if view exists
+        # Check if the focus_data view was successfully created
+        # This indicates whether data files were found and loaded
         view_check = conn.execute(
             "SELECT * FROM information_schema.tables WHERE table_name = 'focus_data'"
         ).fetchone()
@@ -82,7 +157,8 @@ async def get_data_info() -> dict[str, Any]:
                 }
             }
 
-        # Get data summary
+        # Generate comprehensive data summary using FOCUS standard columns
+        # These fields are part of the FOCUS specification for cloud billing
         summary_query = """
             SELECT
                 COUNT(*) as row_count,
@@ -95,11 +171,13 @@ async def get_data_info() -> dict[str, Any]:
         """
         summary = conn.execute(summary_query).fetchone()
 
-        # Get actual columns
+        # Get complete column list to understand data schema
+        # Useful for users to know what fields are available for analysis
         columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data'"
         columns = [row[0] for row in conn.execute(columns_query).fetchall()]
 
-        # Get providers
+        # Sample cloud providers to give users context about data sources
+        # Limited to 10 to avoid overwhelming output while providing useful examples
         providers_query = "SELECT DISTINCT ProviderName FROM focus_data LIMIT 10"
         providers = [row[0] for row in conn.execute(providers_query).fetchall()]
 
@@ -129,11 +207,26 @@ async def get_data_info() -> dict[str, Any]:
 
 @mcp.tool()
 async def list_use_cases() -> dict[str, Any]:
-    """List available predefined FOCUS queries. Use get_use_case(id) to see details before executing."""
+    """
+    List all available predefined FOCUS analytical queries.
+
+    Returns a lightweight overview of available queries without the full SQL text.
+    This helps users discover relevant analyses for their billing data.
+
+    The queries are sourced from focus.finops.org and cover common FinOps
+    use cases like cost trends, service analysis, and optimization opportunities.
+
+    Use get_use_case(id) to see the full SQL and parameter requirements
+    before executing a specific query.
+
+    Returns:
+        Dictionary containing the list of available queries with metadata
+    """
     try:
         all_queries = list(focus_queries.queries.values())
 
-        # Format use cases (lightweight - no SQL)
+        # Format use cases with lightweight metadata only
+        # Excludes SQL text to keep response size manageable for browsing
         use_cases = []
         for query in all_queries:
             use_case = {
@@ -159,14 +252,32 @@ async def list_use_cases() -> dict[str, Any]:
 async def get_use_case(
     use_case_id: str = Field(..., description="Use case ID to get details for"),
 ) -> dict[str, Any]:
-    """Get detailed information about a specific FOCUS query including SQL and parameter requirements."""
+    """
+    Get detailed information about a specific predefined FOCUS query.
+
+    This tool shows the complete SQL query, parameter requirements, and metadata
+    for a specific analytical query. Use this before executing a query to understand:
+    - What parameters are needed (indicated by ? placeholders)
+    - What the query actually does
+    - The source/citation of the query
+
+    Parameters are bound using positional placeholders (?), so when executing
+    the query, provide parameters as a list in the order they appear.
+
+    Args:
+        use_case_id: The identifier for the query (from list_use_cases)
+
+    Returns:
+        Dictionary with complete query details or error information
+    """
     try:
-        # Get the query template
+        # Retrieve the query template from the loaded queries
         query_template = focus_queries.get_query(use_case_id)
         if not query_template:
             return {"error": f"Use case not found: {use_case_id}"}
 
-        # Count parameters for user guidance
+        # Count parameter placeholders to help users understand requirements
+        # Each ? in the SQL requires a corresponding parameter value
         param_count = query_template.query.count("?")
 
         return {
@@ -198,9 +309,31 @@ async def execute_query(
     ),
     limit: Optional[int] = Field(100, description="Max rows to return"),
 ) -> dict[str, Any]:
-    """Execute SQL query or predefined use case on FOCUS data. For use cases, call get_use_case first to see parameter requirements."""
+    """
+    Execute SQL queries or predefined use cases against FOCUS billing data.
+
+    This is the primary execution tool that supports two modes:
+    1. Ad-hoc SQL queries: Pass raw SQL in the 'query' parameter
+    2. Predefined queries: Pass a use case ID from list_use_cases
+
+    Parameter binding uses positional placeholders (?) for security and performance.
+    Parameters are bound in order, so ['2024-01-01', '2024-12-31'] maps to the first
+    and second ? placeholders respectively.
+
+    The tool includes automatic result limiting and formatting for MCP clients,
+    converting raw DuckDB results into JSON-serializable dictionaries.
+
+    Args:
+        query: Raw SQL to execute (mutually exclusive with use_case)
+        use_case: ID of predefined query to run (mutually exclusive with query)
+        parameters: Values for ? placeholders (list preferred, dict for compatibility)
+        limit: Maximum rows to return (default 100, prevents overwhelming responses)
+
+    Returns:
+        Dictionary containing query results, metadata, or error information
+    """
     try:
-        # Validate input - need either query or use_case
+        # Input validation - enforce mutually exclusive parameters
         if not query and not use_case:
             return {
                 "error": "Must provide either 'query' (SQL) or 'use_case' (predefined query ID)"
@@ -211,9 +344,9 @@ async def execute_query(
 
         conn = get_db_connection()
 
-        # Get the SQL to execute
+        # Determine SQL to execute and gather metadata
         if use_case:
-            # Get predefined query
+            # Load predefined query from the query library
             query_template = focus_queries.get_query(use_case)
             if not query_template:
                 return {
@@ -224,7 +357,8 @@ async def execute_query(
             query_name = query_template.name
             query_description = query_template.description
 
-            # Handle parameter substitution for ? placeholders
+            # Handle parameter binding for parameterized queries
+            # Count ? placeholders to validate parameter count
             param_count = sql.count("?")
             if param_count > 0:
                 if not parameters:
@@ -232,14 +366,16 @@ async def execute_query(
                         "error": f"Query requires {param_count} parameters but none provided. Use 'get_use_case' with id '{use_case}' to see parameter requirements."
                     }
 
-                # Handle parameters - prefer list format
+                # Normalize parameters to list format for consistent binding
+                # List format is preferred for positional parameter binding
                 if isinstance(parameters, list):
                     if len(parameters) != param_count:
                         return {
                             "error": f"Query requires {param_count} parameters but {len(parameters)} provided. Use 'get_use_case' with id '{use_case}' to see parameter requirements."
                         }
                 elif isinstance(parameters, dict):
-                    # Convert numbered dict to list for backward compatibility
+                    # Support legacy dict format with numbered keys for backward compatibility
+                    # Convert {"1": "value1", "2": "value2"} to ["value1", "value2"]
                     param_list = []
                     for i in range(1, param_count + 1):
                         key = str(i)
@@ -255,24 +391,28 @@ async def execute_query(
                         "error": "Parameters must be a list (preferred) or numbered dict. Use 'get_use_case' to see parameter requirements."
                     }
         else:
+            # Handle ad-hoc SQL queries
             sql = query
             query_name = "Custom Query"
             query_description = None
 
-        # Apply limit
+        # Apply result limiting if not already present in the query
+        # This prevents accidentally returning millions of rows
         if limit and "LIMIT" not in sql.upper():
             sql = f"{sql} LIMIT {limit}"
 
-        # Execute with or without parameters
+        # Execute query with proper parameter binding
+        # DuckDB handles parameter binding securely to prevent SQL injection
         if use_case and parameters and sql.count("?") > 0:
             result = conn.execute(sql, parameters).fetchall()
         else:
             result = conn.execute(sql).fetchall()
         columns = [desc[0] for desc in conn.description]
 
-        # Format results
+        # Format results for JSON serialization
         formatted_data = format_query_results(result, columns, limit or 100)
 
+        # Build response with metadata and results
         response = {
             "query_name": query_name,
             "row_count": len(result),
@@ -283,6 +423,7 @@ async def execute_query(
         if query_description:
             response["description"] = query_description
 
+        # Indicate if results were truncated due to limit
         if len(result) == limit:
             response["truncated"] = True
 
@@ -292,7 +433,15 @@ async def execute_query(
 
 
 def main():
-    """Run the FOCUS MCP server."""
+    """
+    Run the FOCUS MCP server.
+
+    Starts the FastMCP server which handles MCP protocol communication
+    and exposes the FOCUS billing analysis tools to MCP clients.
+
+    The server runs indefinitely until interrupted, maintaining the
+    database connection and serving requests.
+    """
     mcp.run()
 
 
