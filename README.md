@@ -165,3 +165,9 @@ uv sync --extra dev
 export FOCUS_DATA_PATH="data/focus-export"
 uv run python focus_mcp_server.py
 ```
+
+## Todo
+
+- [ ] Implement automated query synchronization from FOCUS specification
+- [ ] Extract column definitions and attributes from FOCUS spec for enhanced data insights
+- [ ] Enhance response formatting with citations and educational context for AI models
