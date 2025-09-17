@@ -190,11 +190,12 @@ Claude will use the `get_data_info` tool to inspect your dataset.
 
 ### Environment Variables
 
-| Variable              | Default             | Description                                 |
-| --------------------- | ------------------- | ------------------------------------------- |
-| `FOCUS_DATA_LOCATION` | `data/focus-export` | Path to FOCUS data (local or S3 URI)        |
-| `FOCUS_VERSION`       | `1.0`               | FOCUS specification version (1.0, 1.1, 1.2) |
-| `AWS_REGION`          | `us-east-1`         | AWS region for S3 access                    |
+| Variable              | Default             | Description                                           |
+| --------------------- | ------------------- | ----------------------------------------------------- |
+| `FOCUS_DATA_LOCATION` | `data/focus-export` | Path to FOCUS data (local or S3 URI)                  |
+| `FOCUS_VERSION`       | `1.0`               | FOCUS specification version (1.0, 1.1, 1.2)           |
+| `AWS_REGION`          | `us-east-1`         | AWS region for S3 access                              |
+| `AWS_PROFILE`         | (optional)          | AWS profile name to use for S3 authentication         |
 
 ### S3 Configuration Example
 
@@ -206,7 +207,8 @@ Claude will use the `get_data_info` tool to inspect your dataset.
       "args": ["run", "--directory", "/path/to/focus-mcp", "python", "focus_mcp_server.py"],
       "env": {
         "FOCUS_DATA_LOCATION": "s3://my-billing-bucket/focus-exports",
-        "AWS_REGION": "us-west-2"
+        "AWS_REGION": "us-west-2",
+        "AWS_PROFILE": "billing-reader"
       }
     }
   }
