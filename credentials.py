@@ -33,5 +33,3 @@ def setup_s3_credentials(
             REGION '{region}'
         )
     """)
-
-
