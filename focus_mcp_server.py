@@ -43,12 +43,22 @@ mcp = FastMCP(
 
     ## Best Practices
 
-    - Start with get_data_info to understand the loaded data
-    - Use list_use_cases to explore predefined queries
-    - Use get_use_case to see details before executing a predefined query, including parameters needed
-    - Use execute_query to run SQL or predefined queries
-    - Use list_columns and get_column_details to understand the FOCUS schema
-    - Query distinct values to discover valid parameters (e.g., SELECT DISTINCT ServiceName)
+    **IMPORTANT: Always prefer predefined use cases over custom SQL queries**
+
+    1. Start with get_data_info to understand the loaded data
+    2. **STRONGLY RECOMMENDED**: Use list_use_cases to find relevant predefined queries
+    3. Use get_use_case to see the SQL and identify required parameters
+    4. Execute the predefined query with use_case parameter instead of custom SQL
+    5. Only write custom SQL if no suitable predefined query exists
+
+    The predefined queries are:
+    - Professionally crafted by FOCUS experts and the FinOps community
+    - Optimized for performance and accuracy
+    - Include citations to official FOCUS documentation
+    - Cover 36+ common FinOps scenarios (cost analysis, optimization, anomaly detection, etc.)
+    - Tested and validated against real-world data
+
+    Using predefined queries ensures consistent, accurate results and best practices compliance.
 
     ## Tool Usage Guide
 
@@ -57,10 +67,19 @@ mcp = FastMCP(
        - list_columns: Browse all FOCUS columns with metadata
        - get_column_details: Detailed info for specific columns including data types
 
-    2. **Query Execution**
-       - list_use_cases: Browse 36+ predefined FinOps queries
-       - get_use_case: View SQL and parameters for a specific query
-       - execute_query: Run custom SQL or predefined queries with parameters
+    2. **Query Execution Priority**
+
+       **ALWAYS follow this order:**
+
+       a) First: Search list_use_cases for relevant predefined queries
+       b) Second: Use get_use_case to understand the query and its parameters
+       c) Third: Execute with use_case='query-name' parameter
+       d) Last resort: Only write custom SQL if absolutely no predefined query fits
+
+       Example workflow:
+       - User asks: "Show me costs by service"
+       - You should: list_use_cases → find 'service-costs' → get_use_case('service-costs') → execute_query(use_case='service-costs')
+       - You should NOT: Immediately write SELECT ServiceName, SUM(EffectiveCost)...
 
     3. **Schema & Standards**
        - list_attributes: View FOCUS formatting standards
