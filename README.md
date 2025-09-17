@@ -1,7 +1,7 @@
 # FOCUS MCP Server
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FOCUS v1.0](https://img.shields.io/badge/FOCUS%20v1.0-37%20queries-blue.svg)](https://focus.finops.org/)
+[![FOCUS v1.0](https://img.shields.io/badge/FOCUS%20v1.0-36%20queries-blue.svg)](https://focus.finops.org/)
 [![FOCUS v1.1](https://img.shields.io/badge/FOCUS%20v1.1-41%20queries-green.svg)](https://focus.finops.org/)
 [![FOCUS v1.2](https://img.shields.io/badge/FOCUS%20v1.2-53%20queries-orange.svg)](https://focus.finops.org/)
 
@@ -26,23 +26,33 @@ This MCP server connects AI assistants (like Claude) to your FOCUS billing data,
 
 The server provides:
 
-- 🔍 **35+ predefined queries** from the official FOCUS documentation
+- 🔍 **36+ predefined queries** from the official FOCUS documentation
 - 📊 **DuckDB-powered analytics** for fast querying of large datasets
 - 🔄 **Multi-version support** (FOCUS v1.0, v1.1, v1.2)
-- 📚 **Educational examples** with citations to official docs
+- 📚 **Schema documentation** with column/attribute definitions from FOCUS spec
+- 🎯 **Educational examples** with citations to official docs
 
 ## Features
 
 ### MCP Tools Available
 
+**Data & Query Tools:**
+
 1. **`get_data_info`** - Inspect your loaded FOCUS data (row counts, date ranges, providers)
-2. **`list_use_cases`** - Browse 35+ predefined analysis queries
+2. **`list_use_cases`** - Browse 36+ predefined analysis queries
 3. **`get_use_case`** - Get detailed info about specific queries (SQL, parameters, citations)
 4. **`execute_query`** - Run custom SQL or predefined queries on your data
 
+**Schema & Specification Tools:**
+
+5. **`list_columns`** - List all FOCUS columns with metadata (type, requirement level)
+6. **`get_column_details`** - Get detailed information for specific columns
+7. **`list_attributes`** - List FOCUS formatting standards and conventions
+8. **`get_attribute_details`** - Get detailed requirements for specific attributes
+
 ### Query Library
 
-- **35+ Professional Queries (more queries for later versions)**: Curated from [focus.finops.org](https://focus.finops.org/) use cases
+- **36+ Professional Queries (more queries for later versions)**: Curated from [focus.finops.org](https://focus.finops.org/) use cases
 - **Version Support**: Queries for FOCUS v1.0, v1.1, and v1.2
 - **Real-world Scenarios**: Cost optimization, budget tracking, anomaly detection
 - **Official Citations**: Each query links back to the FOCUS documentation
@@ -144,6 +154,10 @@ Claude will use the `get_data_info` tool to inspect your dataset.
 
 # Multi-provider analysis
 "Compare costs across different cloud providers and regions"
+
+# Schema exploration
+"What columns are available in FOCUS v1.2?"
+"Explain the difference between BilledCost and EffectiveCost"
 ```
 
 ## Configuration
@@ -169,5 +183,7 @@ uv run python focus_mcp_server.py
 ## Todo
 
 - [ ] Implement automated query synchronization from FOCUS specification
-- [ ] Extract column definitions and attributes from FOCUS spec for enhanced data insights
+- [x] Extract column definitions and attributes from FOCUS spec for enhanced data insights
 - [ ] Enhance response formatting with citations and educational context for AI models
+- [ ] Validate all use cases queries against v1.1 and v1.2 exports
+- [ ] Evaluate if moving attributes/columns to MCP resources makes more sense

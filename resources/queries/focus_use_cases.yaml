@@ -1,0 +1,1481 @@
+understand_the_billing_account_or_sub_account_entity:
+  title: Understand the billing account or sub account entity
+  slug: understand-the-billing-account-or-sub-account-entity
+  date_created: '2025-07-02T01:06:42'
+  date_modified: '2025-07-02T01:06:42'
+  status: publish
+  link: https://focus.finops.org/use-case/understand-the-billing-account-or-sub-account-entity/
+  description: List all billing and sub-accounts with charges in the period, showing provider, account ID, name, and type. This list allows practitioners to map entity hierarchies and allocate costs.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/understand-the-billing-account-or-sub-account-entity/
+  sql: |-
+    SELECT DISTINCT ProviderName,
+                    BillingAccountID,
+                    BillingAccountName,
+                    BillingAccountType
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+identify_sources_of_billed_cost:
+  title: Identify sources of billed cost
+  slug: identify-sources-of-billed-cost
+  date_created: '2025-06-01T18:58:25'
+  date_modified: '2025-07-01T17:51:42'
+  status: publish
+  link: https://focus.finops.org/use-case/identify-sources-of-billed-cost/
+  description: Reconcile billing data from vendors, provider marketplaces, and cloud service providers to pinpoint true spend and eliminate duplicate charges.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/identify-sources-of-billed-cost/
+  sql: |-
+    SELECT ProviderName,
+           PublisherName,
+           InvoiceIssuer,
+           InvoiceID,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             PublisherName,
+             InvoiceIssuer,
+             InvoiceID
+analyze_credit_memos:
+  title: Analyze credit memos
+  slug: analyze-credit-memos
+  date_created: '2025-06-01T18:57:45'
+  date_modified: '2025-07-01T17:56:09'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-credit-memos/
+  description: Locate provider-issued credit memos in billing data and analyze how each one reduces net spend.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-credit-memos/
+  sql: |-
+    SELECT ProviderName,
+           InvoiceID,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND ChargeCategory = 'Credit'
+    GROUP BY ProviderName,
+             InvoiceID
+verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
+  title: Verify accuracy of provider invoices aka invoice reconciliation
+  slug: verify-accuracy-of-provider-invoices-aka-invoice-reconciliation
+  date_created: '2025-06-01T18:55:43'
+  date_modified: '2025-07-01T17:58:33'
+  status: publish
+  link: https://focus.finops.org/use-case/verify-accuracy-of-provider-invoices-aka-invoice-reconciliation/
+  description: Aggregate provider billing data for each period and reconcile it against provider invoices to validate charge accuracy, flag discrepancies, and strengthen financial accountability.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/verify-accuracy-of-provider-invoices-aka-invoice-reconciliation/
+  sql: |-
+    SELECT InvoiceIssuer,
+           InvoiceID,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY InvoiceIssuer,
+             InvoiceID
+calculate_average_rate_of_a_component_resource:
+  title: Calculate average rate of a component resource
+  slug: calculate-average-rate-of-a-component-resource
+  date_created: '2025-05-30T20:54:03'
+  date_modified: '2025-06-01T18:56:00'
+  status: publish
+  link: https://focus.finops.org/use-case/calculate-average-rate-of-a-component-resource/
+  description: Aggregate usage and pricing across multiple SKUs to compute the average cost per core for each virtual machine series by region. This common denominator supports benchmarking when billed and consumed units differ.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/calculate-average-rate-of-a-component-resource/
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+           SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount,
+           CASE
+               WHEN SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) > 0 THEN SUM(EffectiveCost) / SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED))
+               ELSE NULL
+           END AS AverageEffectiveCoreCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
+    GROUP BY ProviderName,
+             ServiceName,
+             PricingUnit,
+             RegionName,
+             InstanceSeries
+quantify_usage_of_a_component_resource:
+  title: Quantify usage of a component resource
+  slug: quantify-usage-of-a-component-resource
+  date_created: '2025-05-30T20:47:27'
+  date_modified: '2025-06-01T18:56:16'
+  status: publish
+  link: https://focus.finops.org/use-case/quantify-usage-of-a-component-resource/
+  description: Capture daily aggregate usage of component resources, such as core hours or gigabytes, when Providers bill by virtual machines or quantity provisioned. This approach allows FinOps Practitioners to account for scenarios such as analyzing usage across auto-scaled compute services when instantaneous APIs cannot capture historical trends.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/quantify-usage-of-a-component-resource/
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+           SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
+    GROUP BY ProviderName,
+             ServiceName,
+             PricingUnit,
+             RegionName,
+             InstanceSeries
+calculate_unit_economics:
+  title: Calculate unit economics
+  slug: calculate-unit-economics
+  date_created: '2025-05-29T17:13:33'
+  date_modified: '2025-06-01T18:57:31'
+  status: publish
+  link: https://focus.finops.org/use-case/calculate-unit-economics/
+  description: Calculate unit-cost metrics (e.g., cost per GB of storage) to expose cost density and target optimizations that lower overall spend.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/calculate-unit-economics/
+  sql: |-
+    SELECT CAST(ChargePeriodStart AS DATE) AS ChargePeriodDate,
+           SUM(BilledCost) / NULLIF(SUM(CAST(ConsumedQuantity AS DECIMAL(10, 2))), 0) AS CostPerGB
+    FROM focus_data_table
+    WHERE ChargeDescription LIKE '%transfer%'
+      AND ConsumedUnit = 'GB'
+    GROUP BY CAST(ChargePeriodStart AS DATE)
+    ORDER BY ChargePeriodDate ASC;
+calculate_consumption_of_virtual_currency_within_a_billing_period:
+  title: Calculate consumption of virtual currency within a billing period
+  slug: calculate-consumption-of-virtual-currency-within-a-billing-period
+  date_created: '2025-05-29T16:56:47'
+  date_modified: '2025-07-01T17:48:04'
+  status: publish
+  link: https://focus.finops.org/use-case/calculate-consumption-of-virtual-currency-within-a-billing-period/
+  description: Track virtual-currency burn throughout the billing period to forecast exhaustion dates and stay within budget.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/calculate-consumption-of-virtual-currency-within-a-billing-period/
+  sql: |-
+    SELECT ProviderName,
+           SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND PricingCurrency = ?
+      AND ChargeCategory = 'Usage'
+    GROUP BY ProviderName
+    ORDER BY TotalPricingCurrencyEffectiveCost DESC
+    LIMIT 10
+determine_target_of_virtual_currency_usage:
+  title: Determine target of virtual currency usage
+  slug: determine-target-of-virtual-currency-usage
+  date_created: '2025-05-29T16:53:56'
+  date_modified: '2025-06-01T18:59:09'
+  status: publish
+  link: https://focus.finops.org/use-case/determine-target-of-virtual-currency-usage/
+  description: Identify and rank the top charge categories driving virtual-currency consumption to target optimization efforts.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/determine-target-of-virtual-currency-usage/
+  sql: |-
+    SELECT ProviderName,
+           PublisherName,
+           ServiceName,
+           ChargeDescription,
+           SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND PricingCurrency = ?
+    GROUP BY ProviderName,
+             PublisherName,
+             ServiceName,
+             ChargeDescription
+    ORDER BY TotalPricingCurrencyEffectiveCost DESC
+    LIMIT 10
+analyze_effective_cost_by_pricing_currency:
+  title: Analyze effective cost by pricing currency
+  slug: analyze-effective-cost-by-pricing-currency
+  date_created: '2025-05-29T16:49:27'
+  date_modified: '2025-06-01T18:59:30'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-effective-cost-by-pricing-currency/
+  description: Break down the effective cost by each pricing currency to surface regional price differences and exchange-rate impacts.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-effective-cost-by-pricing-currency/
+  sql: |-
+    SELECT ProviderName,
+           PublisherName,
+           ServiceName,
+           PricingCurrency,
+           SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             PublisherName,
+             ServiceName,
+             PricingCurrency
+analyze_purchase_of_virtual_currency:
+  title: Analyze purchase of virtual currency
+  slug: analyze-purchase-of-virtual-currency
+  date_created: '2025-05-29T16:42:09'
+  date_modified: '2025-06-01T18:59:50'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-purchase-of-virtual-currency/
+  description: Analyze virtual-currency purchase patterns (e.g., upfront) and actively monitor burn down to prevent overage charges.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-purchase-of-virtual-currency/
+  sql: |-
+    SELECT ProviderName,
+           PublisherName,
+           ChargeDescription,
+           PricingUnit,
+           BillingCurrency,
+           SUM(PricingQuantity) AS TotalPricingQuantity,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND ChargeCategory = 'Purchase'
+      AND PricingUnit = ?
+    GROUP BY ProviderName,
+             PublisherName,
+             ChargeDescription,
+             PricingUnit,
+             BillingCurrency
+determine_contracted_savings_by_virtual_currency:
+  title: Determine contracted savings by virtual currency
+  slug: determine-contracted-savings-by-virtual-currency
+  date_created: '2025-05-28T23:37:50'
+  date_modified: '2025-06-01T19:00:17'
+  status: publish
+  link: https://focus.finops.org/use-case/determine-contracted-savings-by-virtual-currency/
+  description: Compare the virtual currency discounted rate to the virtual currency list price to determine the difference, as contracts can lower the virtual-currency price of certain operations.
+  focus_versions:
+  - v1.2
+  source_url: https://focus.finops.org/use-case/determine-contracted-savings-by-virtual-currency/
+  sql: |-
+    SELECT ServiceName,
+           ServiceSubcategory,
+           ChargeDescription,
+           BillingCurrency,
+           PricingCurrency,
+           SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
+    FROM focus_data_tabl
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND PricingCurrencyListUnitPrice > PricingCurrencyContractedUnitPrice
+    GROUP BY ServiceName,
+             ServiceSubcategory,
+             ChargeDescription,
+             BillingCurrency,
+             PricingCurrency
+analyze_tag_coverage:
+  title: Analyze tag coverage
+  slug: analyze-tag-coverage
+  date_created: '2024-11-19T07:00:01'
+  date_modified: '2025-06-01T19:58:44'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-tag-coverage/
+  description: Analyzing the amount of costs for a provider that have been tagged with a specific tag can enable the FinOps practitioner to check the amount of costs being allocated via tags.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-tag-coverage/
+  sql: |-
+    SELECT SUM(CASE
+                   WHEN JSON_CONTAINS_PATH(tags, 'one', '$.?') THEN EffectiveCost
+                   ELSE 0
+               END) / SUM(EffectiveCost) * 100 AS TaggedPercentage
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND EffectiveCost > 0
+      AND ProviderName = ?
+analyze_the_different_metered_costs_for_a_particular_sku:
+  title: Analyze the different metered costs for a particular SKU
+  slug: analyze-the-different-metered-costs-for-a-particular-sku
+  date_created: '2024-11-07T10:19:32'
+  date_modified: '2025-06-01T19:58:04'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-the-different-metered-costs-for-a-particular-sku/
+  description: |-
+    Understanding the highest costing SKUs can help multiple personas in an organization achieve goals, such as:
+    - Contract negotiation: Procurement teams can use this information to negotiate the best possible discounts with cloud providers.
+    - SKU-based forecasting: Product and Finance teams can use this information to forecast future demand for SKUs and plan accordingly.
+    - High unit-cost cleanup: FinOps teams can use this information to identify and prioritize SKUs with high unit costs, which can be optimized or eliminated to reduce overall cloud spend.
+  focus_versions:
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-the-different-metered-costs-for-a-particular-sku/
+  sql: |-
+    SELECT ProviderName,
+           ChargePeriodStart,
+           ChargePeriodEnd,
+           SkuId,
+           SkuPriceId,
+           PricingUnit,
+           ListUnitPrice,
+           SUM(PricingQuantity) AS TotalPricingQuantity,
+           SUM(ListCost) AS TotalListCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             ChargePeriodStart,
+             ChargePeriodEnd,
+             SkuId,
+             SkuPriceId,
+             PricingUnit,
+             ListUnitPrice
+    ORDER BY ChargePeriodStart ASC
+    LIMIT 100
+report_costs_by_service_category_and_subcategory:
+  title: Report costs by service category and subcategory
+  slug: report-costs-by-service-category-and-subcategory
+  date_created: '2024-11-07T10:10:52'
+  date_modified: '2025-06-01T20:00:33'
+  status: publish
+  link: https://focus.finops.org/use-case/report-costs-by-service-category-and-subcategory/
+  description: Understanding costs across providers, billing periods, and service categories (Analytics, Compute, Database, Storage, etc.)  and service subcategories (Virtual Machines,Relational Databases, Content Delivery, etc) provides valuable insight into total costs.
+  focus_versions:
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/report-costs-by-service-category-and-subcategory/
+  sql: |-
+    SELECT ProviderName,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory,
+           ServiceSubcategory,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      and BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingCurrency,
+             BillingPeriodStart,
+             ServiceCategory,
+             ServiceSubcategory
+    ORDER BY TotalBilledCost DESC
+analyze_capacity_reservations_on_compute_costs:
+  title: Analyze capacity reservations on compute costs
+  slug: analyze-capacity-reservations-on-compute-costs
+  date_created: '2024-11-07T09:56:46'
+  date_modified: '2025-06-01T20:07:05'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-capacity-reservations-on-compute-costs/
+  description: Compute costs are often the highest spend area in a cloud bill, it may be useful for FinOps practitioners and Engineers to understand the volume of costs that are coming from reserved commitments either used or unused compared to the amount of compute costs that have no reservations applied. Capacity reservations can be very useful for Engineering to help them ensure capacity is available for their services when it is needed, however when reducing usage and rightsizing workloads capacity reservations need to be adjusted at the same time.
+  focus_versions:
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-capacity-reservations-on-compute-costs/
+  sql: |-
+    SELECT CASE
+               WHEN CapacityReservationId IS NOT NULL
+                    AND CapacityReservationStatus = 'Unused' THEN 'Unused Capacity Reservation'
+               WHEN CapacityReservationId IS NOT NULL
+                    AND CapacityReservationStatus = 'Used' THEN 'Compute using Capacity Reservation'
+               ELSE 'Compute without Capacity Reservation'
+           END AS Status,
+           ProviderName,
+           BillingAccountId,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND ServiceCategory = 'Compute'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             CapacityReservationId,
+             CapacityReservationStatus
+identify_unused_capacity_reservations:
+  title: Identify unused capacity reservations
+  slug: identify-unused-capacity-reservations
+  date_created: '2024-11-07T09:39:56'
+  date_modified: '2025-06-01T19:54:22'
+  status: publish
+  link: https://focus.finops.org/use-case/identify-unused-capacity-reservations/
+  description: Identify all data in a time period where CapacityReservationStatus is ‘unused’ thus identifying capacity reservations that aren’t used and enabling the Practitioner to take action on either cancelling the reservation (if able), working with other personas on a workload that could use the reservation, or performing informed ignore (knowing it is there but ignoring it because there is nothing one can do).
+  focus_versions:
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/identify-unused-capacity-reservations/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           CapacityReservationId,
+           CapacityReservationStatus,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND CapacityReservationStatus = 'Unused'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             CapacityReservationId,
+             CapacityReservationStatus
+corrections_by_subaccount:
+  title: Report corrections by subaccount for a previously invoiced billing period
+  slug: corrections-by-subaccount
+  date_created: '2024-05-22T18:16:04'
+  date_modified: '2025-07-28T18:29:29'
+  status: publish
+  link: https://focus.finops.org/use-case/corrections-by-subaccount/
+  description: Use FOCUS data to identify refunds across multiple providers, billing accounts, and subaccounts.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/corrections-by-subaccount/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           ServiceCategory,
+           SubAccountId,
+           SubAccountName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+      AND ChargeClass = 'Correction'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             SubAccountId,
+             SubAccountName,
+             ServiceCategory
+recurring_commitment_charges:
+  title: Report recurring charges for commitment-based discounts over a period
+  slug: recurring-commitment-charges
+  date_created: '2024-05-22T18:14:22'
+  date_modified: '2025-06-01T19:53:11'
+  status: publish
+  link: https://focus.finops.org/use-case/recurring-commitment-charges/
+  description: As a Finance person, I want to understand the recurring costs of commitment based discounts over a period of time to improve forecasting.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/recurring-commitment-charges/
+  sql: |-
+    SELECT BillingPeriodStart,
+           CommitmentDiscountId,
+           CommitmentDiscountName,
+           CommitmentDiscountType,
+           ChargeFrequency,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodStart < ?
+      AND ChargeFrequency = 'Recurring'
+      AND CommitmentDiscountId IS NOT NULL
+    GROUP BY BillingPeriodStart,
+             CommitmentDiscountId,
+             CommitmentDiscountName,
+             CommitmentDiscountType,
+             ChargeFrequency
+costs_service_name:
+  title: Analyze costs by service name
+  slug: costs-service-name
+  date_created: '2024-05-22T18:08:25'
+  date_modified: '2025-06-01T19:52:48'
+  status: publish
+  link: https://focus.finops.org/use-case/costs-service-name/
+  description: Analyzing service-level spending trends over a time period can expose expected and unexpected growth in the consumption of a cloud service, and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering, and finance leaders within the organization.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/costs-service-name/
+  sql: |-
+    SELECT BillingPeriodStart,
+           ProviderName,
+           SubAccountId,
+           SubAccountName,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ServiceName = ?
+      AND BillingPeriodStart >= ?
+      AND BillingPeriodStart < ?
+    GROUP BY BillingPeriodStart,
+             ProviderName,
+             SubAccountId,
+             SubAccountName,
+             ServiceName
+    ORDER BY MonthlyCost DESC
+report_spending_across_billing_periods_by_service_category:
+  title: Report spending across billing periods for a provider by service category
+  slug: report-spending-across-billing-periods-by-service-category
+  date_created: '2024-05-22T18:05:36'
+  date_modified: '2025-06-01T19:52:18'
+  status: publish
+  link: https://focus.finops.org/use-case/report-spending-across-billing-periods-by-service-category/
+  description: Understanding costs across providers, billing periods, billing accounts, and service categories (Analytics, Compute, Database, Storage, etc.) provides valuable insight into total costs and can be used by Procurement to focus negotiations for specific providers with details on the billing accounts that are driving costs.   to focus negotiations toward highest costing items.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/report-spending-across-billing-periods-by-service-category/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountName,
+           BillingAccountId,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND ProviderName = ?
+    GROUP BY ProviderName,
+             BillingAccountName,
+             BillingAccountId,
+             BillingCurrency,
+             BillingPeriodStart,
+             ServiceCategory,
+             ServiceName
+    ORDER BY TotalBilledCost DESC
+analyze_service_costs_by_region:
+  title: Analyze service costs by region
+  slug: analyze-service-costs-by-region
+  date_created: '2024-05-22T18:01:50'
+  date_modified: '2025-06-01T19:51:51'
+  status: publish
+  link: https://focus.finops.org/use-case/analyze-service-costs-by-region/
+  description: Analyzing Service level spending trends over a time period can expose expected and unexpected growth in the consumption of various services, by region, across all providers and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering and finance leaders within the organization.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/analyze-service-costs-by-region/
+  sql: |-
+    SELECT ChargePeriodStart,
+           ProviderName,
+           RegionId,
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ChargePeriodStart,
+             ProviderName,
+             RegionId,
+             ServiceName
+    ORDER BY ChargePeriodStart,
+             SUM(EffectiveCost) DESC
+report_service_costs_by_providers_subaccount:
+  title: Report service costs by providers subaccount
+  slug: report-service-costs-by-providers-subaccount
+  date_created: '2024-05-22T17:59:56'
+  date_modified: '2025-06-01T19:51:25'
+  status: publish
+  link: https://focus.finops.org/use-case/report-service-costs-by-providers-subaccount/
+  description: Organizations wants to negotiate private pricing for a particular workload, a subaccount that carries specialized workloads, or their entire footprint. The cost metric used must amortize up-front and recurring fees to get an accurate view of the effective cost.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/report-service-costs-by-providers-subaccount/
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           SubAccountId,
+           ChargePeriodStart,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+      AND SubAccountId = ?
+      AND ProviderName = ?
+    GROUP BY ProviderName,
+             ServiceName,
+             SubAccountId,
+             ChargePeriodStart
+    ORDER BY SUM(EffectiveCost),
+             BillingPeriodStart DESC
+service_costs_month_over_month:
+  title: Analyze service costs month over month
+  slug: service-costs-month-over-month
+  date_created: '2024-05-22T17:56:35'
+  date_modified: '2025-06-01T19:51:05'
+  status: publish
+  link: https://focus.finops.org/use-case/service-costs-month-over-month/
+  description: Analyzing service-level spending trends over a time period can expose expected and unexpected growth in the consumption of various services across all providers and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering and finance leaders within the organization.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/service-costs-month-over-month/
+  sql: |-
+    SELECT MONTH(ChargePeriodStart),
+           ProviderName,
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodStart < ?
+    GROUP BY MONTH(ChargePeriodStart),
+             ProviderName,
+             ServiceName
+    ORDER BY MONTH(ChargePeriodStart),
+             SUM(EffectiveCost) DESC
+application_cost:
+  title: Report application cost month over month
+  slug: application-cost
+  date_created: '2024-05-10T21:39:17'
+  date_modified: '2025-06-01T19:50:39'
+  status: publish
+  link: https://focus.finops.org/use-case/application-cost/
+  description: As an application owner or engineering team I want to track the month over month costs of my application.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/application-cost/
+  sql: |-
+    SELECT MONTH(BillingPeriodStart),
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE Tags["Application"] = ?
+      AND ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+    GROUP BY MONTH(BillingPeriodStart),
+             ServiceName
+resource_component_costs:
+  title: Analyze costs of components of a resource
+  slug: resource-component-costs
+  date_created: '2024-05-10T21:15:01'
+  date_modified: '2025-06-01T19:49:52'
+  status: publish
+  link: https://focus.finops.org/use-case/resource-component-costs/
+  description: Using FOCUS data, an Engineer can deep dive on cost details for a single resource.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/resource-component-costs/
+  sql: |-
+    SELECT ResourceId,
+           ResourceName,
+           ResourceType,
+           ChargeDescription,
+           SkuId,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND ResourceId = ?
+    GROUP BY ResourceId,
+             ResourceName,
+             ResourceType,
+             ChargeDescription,
+             SkuId
+costs_service_category:
+  title: Report costs by service category
+  slug: costs-service-category
+  date_created: '2024-05-10T20:55:46'
+  date_modified: '2025-06-01T19:49:24'
+  status: publish
+  link: https://focus.finops.org/use-case/costs-service-category/
+  description: Understanding costs across providers, billing periods, and service categories (Analytics, Compute, Database, Storage, etc.) provides valuable insight into total costs.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/costs-service-category/
+  sql: |-
+    SELECT ProviderName,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      and BillingPeriodEnd <= ?
+    GROUP BY ProviderName,
+             BillingCurrency,
+             BillingPeriodStart,
+             ServiceCategory
+    ORDER BY TotalBilledCost DESC
+report_corrections:
+  title: Report corrections for a previously invoiced billing period
+  slug: report-corrections
+  date_created: '2024-05-10T20:46:44'
+  date_modified: '2025-07-28T18:26:01'
+  status: publish
+  link: https://focus.finops.org/use-case/report-corrections/
+  description: FinOps Practitioners need to identity all refunds within a billing period.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/report-corrections/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           ChargeCategory,
+           ServiceCategory,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+      AND ChargeClass = 'Correction'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             ChargeCategory,
+             ServiceCategory,
+             ServiceName
+effective_cost_compute:
+  title: Report effective cost of compute
+  slug: effective-cost-compute
+  date_created: '2024-05-10T20:33:43'
+  date_modified: '2025-06-01T19:48:28'
+  status: publish
+  link: https://focus.finops.org/use-case/effective-cost-compute/
+  description: Engineers and Engineering Managers want to reduce their billed cost for Compute from a specific provider.  In order to do that, they need to know the current rate of commitment-based discounts (without contracted/negotiated discounts) per type of commitment. This helps to strategize further purchases.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/effective-cost-compute/
+  sql: |-
+    SELECT CommitmentDiscountType,
+           ProviderName,
+           ServiceName,
+           SubAccountId,
+           SubAccountName,
+           BillingPeriodStart,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd <= ?
+      AND ServiceCategory = 'Compute'
+    GROUP BY CommitmentDiscountType,
+             ServiceName,
+             ProviderName,
+             SubAccountId,
+             SubAccountName,
+             BillingPeriodStart
+commitment_discount_purchases:
+  title: Report commitment discount purchases
+  slug: commitment-discount-purchases
+  date_created: '2024-05-10T20:18:37'
+  date_modified: '2025-06-01T19:47:17'
+  status: publish
+  link: https://focus.finops.org/use-case/commitment-discount-purchases/
+  description: Tracking and reconciling commitment-based discounts across providers is a key to success for FinOps.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/commitment-discount-purchases/
+  sql: |-
+    SELECT MIN(ChargePeriodStart) AS ChargePeriodStart,
+           MAX(ChargePeriodEnd) AS ChargePeriodEnd,
+           ProviderName,
+           BillingAccountId,
+           CommitmentDiscountId,
+           CommitmentDiscountType,
+           CommitmentDiscountUnit,
+           CommitmentDiscountQuantity,
+           ChargeFrequency,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND ChargeCategory = 'Purchase'
+      AND CommitmentDiscountId IS NOT NULL
+    GROUP BY ProviderName,
+             BillingAccountId,
+             CommitmentDiscountId,
+             CommitmentDiscountType,
+             CommitmentDiscountUnit,
+             CommitmentDiscountQuantity,
+             ChargeFrequency
+effective_savings_rate_services:
+  title: Determine Effective Savings Rate by Service
+  slug: effective-savings-rate-services
+  date_created: '2024-05-10T19:53:54'
+  date_modified: '2025-07-09T01:29:07'
+  status: publish
+  link: https://focus.finops.org/use-case/effective-savings-rate-services/
+  description: FinOps Practitioners are able to compute in a first step the Contracted Cost from the Contracted Unit Prices and the Quantities in Pricing Unit, and in the second step the ESR, which is (Contracted Cost - Effective Cost) / Contracted Cost.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/effective-savings-rate-services/
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           SUM(ContractedCost) AS Total ContractedCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost,
+           ((SUM(ContractedCost) - SUM(EffectiveCost)) / SUM(ContractedCost)) AS EffectiveSavingsRate
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             ServiceName
+effective_savings_rate:
+  title: Determine Effective Savings Rate
+  slug: effective-savings-rate
+  date_created: '2024-05-10T19:41:35'
+  date_modified: '2025-07-09T01:23:49'
+  status: publish
+  link: https://focus.finops.org/use-case/effective-savings-rate/
+  description: |-
+    The Effective Savings Rate is a KPI to track the efficiency of using commitment-based discounts.
+
+    The KPI calculation is (Contracted Cost - Effective Cost) / Contracted Cost.
+
+    The Contracted Cost can be computed from the Contracted Unit Price and the Quantity in Pricing Unit.
+
+    Outcome: FinOps Practitioners are able to compute in a first step the Contracted Cost from the Contracted Unit Prices and the Quantities in Pricing Unit, and in the second step the ESR, which is (Contracted Cost - Effective Cost) / Contracted Cost.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/effective-savings-rate/
+  sql: |-
+    SELECT ProviderName,
+           EffectiveCost,
+           ((ListCost - EffectiveCost) / ListCost) AS ESROverList,
+           ((ContractedCost - EffectiveCost) / ContractedUnitPrice) AS ESROverContract
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+resource_costs_sku:
+  title: Analyze resource costs by SKU
+  slug: resource-costs-sku
+  date_created: '2024-05-10T19:24:45'
+  date_modified: '2025-06-01T19:44:25'
+  status: publish
+  link: https://focus.finops.org/use-case/resource-costs-sku/
+  description: |-
+    Understanding the highest costing SKUs can help multiple personas in an organization achieve goals, such as:
+    - Contract negotiation: Procurement teams can use this information to negotiate the best possible discounts with cloud providers.
+    - SKU-based forecasting: Product and Finance teams can use this information to forecast future demand for SKUs and plan accordingly.
+    - High unit-cost cleanup: FinOps teams can use this information to identify and prioritize SKUs with high unit costs, which can be optimized or eliminated to reduce overall cloud spend.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/resource-costs-sku/
+  sql: |-
+    SELECT ProviderName,
+           ChargePeriodStart,
+           ChargePeriodEnd,
+           SkuId,
+           SkuPriceId,
+           PricingUnit,
+           ListUnitPrice,
+           SUM(PricingQuantity) AS TotalPricingQuantity,
+           SUM(ListCost) AS TotalListCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             ChargePeriodStart,
+             ChargePeriodEnd,
+             SkuId,
+             SkuPriceId,
+             PricingUnit,
+             ListUnitPrice
+    ORDER BY ChargePeriodStart ASC
+    LIMIT 100
+marketplace_vendors_costs:
+  title: Analyze marketplace vendors costs
+  slug: marketplace-vendors-costs
+  date_created: '2024-05-10T18:56:03'
+  date_modified: '2025-06-01T20:15:49'
+  status: publish
+  link: https://focus.finops.org/use-case/marketplace-vendors-costs/
+  description: 'FinOps Practitioners want to be able to answer the question: How much are we spending each month on SaaS products that were purchased via a Cloud Service Provider''s marketplace?'
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/marketplace-vendors-costs/
+  sql: |-
+    SELECT ChargePeriodStart,
+           ChargePeriodEnd,
+           ProviderName,
+           PublisherName,
+           InvoiceIssuerName,
+           ROUND(SUM(EffectiveCost), 2) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND InvoiceIssuerName != PublisherName
+    GROUP BY ChargePeriodStart,
+             ChargePeriodEnd,
+             ProviderName,
+             PublisherName,
+             InvoiceIssuerName
+    ORDER BY TotalEffectiveCost ASC
+cost_compute_subaccount:
+  title: Analyze cost per compute service for a subaccount
+  slug: cost-compute-subaccount
+  date_created: '2024-05-10T18:05:32'
+  date_modified: '2025-06-01T19:42:16'
+  status: publish
+  link: https://focus.finops.org/use-case/cost-compute-subaccount/
+  description: Compute spend tends to be the largest component of spend in most cloud bills. Drilling into the resource-level view of cost for a given day can provide a detailed view of the heaviest spending compute resources, including a view of which time periods the consumption was at its highest level.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/cost-compute-subaccount/
+  sql: |-
+    SELECT Min(ChargePeriodStart),
+           Max(ChargePeriodEnd),
+           ServiceName,
+           ResourceId,
+           ResourceName,
+           SUM(PricingQuantity),
+           SUM(EffectiveCost) AS MonthlyEffectiveCost
+    FROM focus_data_table
+    WHERE SubAccountId = ?
+      AND ServiceCategory = 'Compute'
+      AND ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ServiceName,
+             ResourceId,
+             ResourceName
+    ORDER BY MonthlyEffectiveCost DESC
+costs_by_availability_zone:
+  title: Analyze costs by availability zone for a subaccount
+  slug: costs-by-availability-zone
+  date_created: '2024-05-10T17:34:32'
+  date_modified: '2025-06-01T19:41:03'
+  status: publish
+  link: https://focus.finops.org/use-case/costs-by-availability-zone/
+  description: "It is good practice for Engineering to monitor cost and usage of services by availability zone for all regions to:  \nA) ensure there isn't any cost/usage occuring outside of the expected locations, and \nB) to ensure your costs are spread according to an expected ratio"
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/costs-by-availability-zone/
+  sql: |-
+    SELECT ProviderName,
+           RegionName,
+           AvailabilityZone,
+           BillingPeriodStart,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE SubAccountId = ?
+      AND ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             RegionName,
+             AvailabilityZone,
+             BillingPeriodStart
+    ORDER BY ProviderName,
+             RegionName,
+             AvailabilityZone,
+             BillingPeriodStart
+daily_anomaly_services:
+  title: Identify anomalous daily spending by subaccount, region, and service
+  slug: daily-anomaly-services
+  date_created: '2024-05-09T22:50:34'
+  date_modified: '2025-06-01T20:14:44'
+  status: publish
+  link: https://focus.finops.org/use-case/daily-anomaly-services/
+  description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Service-level trends may get hidden when aggregated to a month-level. In this case, we want to monitor cost trends with up-front payments amortized.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/daily-anomaly-services/
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName,
+           ServiceName,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
+             ProviderName,
+             SubAccountId,
+             RegionId,
+             RegionName,
+             ServiceName
+daily_anomaly_region:
+  title: Identify anomalous daily spending by subaccount and region
+  slug: daily-anomaly-region
+  date_created: '2024-05-09T22:48:31'
+  date_modified: '2025-06-01T19:39:44'
+  status: publish
+  link: https://focus.finops.org/use-case/daily-anomaly-region/
+  description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Region-level trends may get hidden when aggregated to a month-level. In this case, we want to monitor cost trends with up-front payments amortized.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/daily-anomaly-region/
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
+             ProviderName,
+             SubAccountId,
+             RegionId,
+             RegionName
+daily_anomaly_subaccount:
+  title: Identify anomalous daily spending by subaccount
+  slug: daily-anomaly-subaccount
+  date_created: '2024-05-09T22:45:52'
+  date_modified: '2025-06-01T19:40:12'
+  status: publish
+  link: https://focus.finops.org/use-case/daily-anomaly-subaccount/
+  description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Account-level trends may get hidden when aggregated to a month-level. In this case, we want to monitor cost trends with up-front payments amortized.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/daily-anomaly-subaccount/
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
+             ProviderName,
+             SubAccountId
+update_application_budgets:
+  title: Update budgets for each application
+  slug: update-application-budgets
+  date_created: '2024-05-09T22:22:45'
+  date_modified: '2025-06-01T19:38:38'
+  status: publish
+  link: https://focus.finops.org/use-case/update-application-budgets/
+  description: Finance manages tracking of budgets and must update application budgets with the actual costs billed each month so the budget is not exceeded.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/update-application-budgets/
+  sql: |-
+    SELECT ProviderName,
+           BillingPeriodStart,
+           BillingPeriodEnd,
+           Tags["Application"] AS Application SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingPeriodStart,
+             BillingPeriodEnd,
+             Tags["Application"]
+update_budgets:
+  title: Update budgets with billed costs
+  slug: update-budgets
+  date_created: '2024-05-09T22:15:20'
+  date_modified: '2025-06-01T20:13:38'
+  status: publish
+  link: https://focus.finops.org/use-case/update-budgets/
+  description: Finance manages tracking of budgets and must update long-term budgets with the actual costs billed each month so the budget is not exceeded.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/update-budgets/
+  sql: |-
+    SELECT ProviderName,
+           BillingPeriodStart,
+           BillingPeriodEnd,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingPeriodStart,
+             BillingPeriodEnd
+report_subaccount_regions:
+  title: Report subaccounts by region
+  slug: report-subaccount-regions
+  date_created: '2024-05-09T22:04:05'
+  date_modified: '2025-06-01T19:37:14'
+  status: publish
+  link: https://focus.finops.org/use-case/report-subaccount-regions/
+  description: FinOps Practitioners must identify if there are any data residency/ localization/ sovereignty inconsistencies. In order to identify any potential anomalies, they would like to see if the resource being billed for exists in the same geography as the primary payer account.  If they do not exist in the same geography, the team would like it flagged for analysis.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/report-subaccount-regions/
+  sql: |-
+    SELECT ProviderName,
+           SubAccountId,
+           RegionId RegionName,
+           COUNT(1)
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             SubAccountId,
+             RegionId,
+             RegionName
+forecast_costs:
+  title: Get historical usage and rates to enable cost forecasting
+  slug: forecast-costs
+  date_created: '2024-05-09T21:29:46'
+  date_modified: '2025-06-01T19:36:42'
+  status: publish
+  link: https://focus.finops.org/use-case/forecast-costs/
+  description: While Finance will look at higher-level forecasting data such as amortized costs and total cashflow, a FinOps Practitioner needs to forecast costs from quantities of priced units and effective costs based on historical rates. Rates can be computed from costs and quantities can be retrieved from FOCUS data. Effective costs are used to account for the costs of commitment purchases. This query extracts cost and usage data by Region. More fine-grain extrapolation could be done based on further dimensions like Tags.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/forecast-costs/
+  sql: |-
+    SELECT ProviderName,
+           BillingPeriodStart,
+           BillingPeriodEnd,
+           ServiceCategory,
+           ServiceName,
+           RegionId,
+           RegionName,
+           PricingUnit,
+           SUM(EffectiveCost) AS TotalEffectiveCost,
+           SUM(PricingQuantity) AS TotalPricingQuantity
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd <= ?
+    GROUP BY ProviderName,
+             BillingPeriodStart,
+             BillingPeriodEnd,
+             ServiceCategory,
+             ServiceName,
+             RegionId,
+             RegionName,
+             PricingUnit
+forecast_cashflow:
+  title: Forecast cashflow month over month based on historical trends by service
+  slug: forecast-cashflow
+  date_created: '2024-05-09T21:21:41'
+  date_modified: '2025-06-01T20:12:50'
+  status: publish
+  link: https://focus.finops.org/use-case/forecast-cashflow/
+  description: Finance needs to perform month over month forecasting of cashflow by extrapolating from historical cash costs. Having this data enables Finance to create cashflow cost models.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/forecast-cashflow/
+  sql: |-
+    SELECT MONTH(BillingPeriodStart),
+           ProviderName,
+           ServiceCategory,
+           ServiceName SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY MONTH(BillingPeriodStart),
+             ProviderName,
+             ServiceCategory,
+             ServiceName
+forecast_amortized_costs:
+  title: Forecast amortized costs month over month based on historical trends
+  slug: forecast-amortized-costs
+  date_created: '2024-05-09T21:18:46'
+  date_modified: '2025-06-01T19:35:17'
+  status: publish
+  link: https://focus.finops.org/use-case/forecast-amortized-costs/
+  description: Finance needs to perform month over month forecasting by extrapolating amortized costs based on historical rates.  Having this data enables Finance to create amortized cost models.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/forecast-amortized-costs/
+  sql: |-
+    SELECT MONTH(BillingPeriodStart),
+           ProviderName,
+           ServiceCategory,
+           ServiceName,
+           ChargeCategory,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY MONTH(BillingPeriodStart),
+             ProviderName,
+             ServiceCategory,
+             ServiceName,
+             ChargeCategory
+verify_discounts_applied:
+  title: Verify discount accuracy for previously invoiced billing period
+  slug: verify-discounts-applied
+  date_created: '2024-05-09T19:09:18'
+  date_modified: '2025-07-28T18:26:28'
+  status: publish
+  link: https://focus.finops.org/use-case/verify-discounts-applied/
+  description: FinOps Practitioners must be able to verify that proper discounting is applied for negotiated discounts, live discounts, commitment based discounts, or other discount mechanisms. A FinOps Practitioner can calculate the costs of services over a billing period and compare it to the invoice.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/verify-discounts-applied/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency,
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost,
+           SUM(ListCost) AS TotalListCost,
+           SUM(BilledCost) AS TotalBilledCost,
+           (SUM(EffectiveCost) / SUM(BilledCost)) * 100 AS EffectiveDiscount
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+      AND ChargeClass != 'Correction'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             BillingAccountName,
+             BillingCurrency,
+             ServiceName
+verify_service_charges:
+  title: Verify accuracy of services charges across providers
+  slug: verify-service-charges
+  date_created: '2024-05-09T19:06:00'
+  date_modified: '2025-06-01T19:33:45'
+  status: publish
+  link: https://focus.finops.org/use-case/verify-service-charges/
+  description: As a FinOps Practitioner, I need to verify the accuracy of service charges across multiple provider invoices.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/verify-service-charges/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingAccountName,
+             BillingAccountId,
+             BillingCurrency,
+             ServiceName
+verify_invoices:
+  title: Verify accuracy of provider invoices
+  slug: verify-invoices
+  date_created: '2024-05-09T19:02:46'
+  date_modified: '2025-06-01T19:32:55'
+  status: publish
+  link: https://focus.finops.org/use-case/verify-invoices/
+  description: As a FinOps Practitioner, I need to verify the accuracy of provider invoices.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/verify-invoices/
+  sql: |-
+    SELECT ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingAccountId,
+             BillingAccountName,
+             BillingCurrency
+compare_usage_month_over_month:
+  title: Compare resource usage month over month
+  slug: compare-usage-month-over-month
+  date_created: '2024-05-09T18:56:08'
+  date_modified: '2025-06-01T19:32:03'
+  status: publish
+  link: https://focus.finops.org/use-case/compare-usage-month-over-month/
+  description: FinOps Practitioners can compare usage and costs across charge periods to identify changes in usage month over month.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/compare-usage-month-over-month/
+  sql: |-
+    SELECT MONTH(ChargePeriodStart),
+           ProviderName,
+           ServiceName,
+           ResourceId,
+           SkuId,
+           ConsumedUnit,
+           SUM(ConsumedQuantity) AS TotalConsumedQuantity
+    FROM focus_data_table
+    WHERE ChargeCategory = 'Usage'
+      AND ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY MONTH(ChargePeriodStart),
+             ProviderName,
+             ServiceName,
+             ResourceId,
+             SkuId,
+             ConsumedUnit
+service_costs_subaccount:
+  title: Analyze service costs by subaccount
+  slug: service-costs-subaccount
+  date_created: '2024-05-08T20:53:07'
+  date_modified: '2025-06-01T20:11:25'
+  status: publish
+  link: https://focus.finops.org/use-case/service-costs-subaccount/
+  description: By understanding the services incurring the highest cost in a subaccount for a period of time, Engineers can get a high-level picture of where to prioritize their efforts when it comes to optimizing usage. Often, the largest optimization opportunities are in the services that incur the most cost.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/service-costs-subaccount/
+  sql: |-
+    SELECT ChargePeriodStart,
+           SubAccountId,
+           SubAccountName,
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE SubAccountID = ?
+      AND ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+    GROUP BY ChargePeriodStart,
+             SubAccountId,
+             SubAccountName,
+             ServiceName
+    ORDER BY SUM(EffectiveCost) DESC
+    LIMIT 10
+identify_unused_commitments:
+  title: Identify unused commitments
+  slug: identify-unused-commitments
+  date_created: '2024-05-08T20:23:42'
+  date_modified: '2025-06-01T19:27:37'
+  status: publish
+  link: https://focus.finops.org/use-case/identify-unused-commitments/
+  description: Identify all data in a time period where ChargeSubcategory is 'not used' thus identifying commitments that aren't used and enabling the Practitioner to take action on either selling the commitment (if able), working with other personas on a workload that could use the commitment, or performing informed ignore (knowing it is there but ignoring it because there is nothing one can do).
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/identify-unused-commitments/
+  sql: |-
+    SELECT MIN(ChargePeriodStart) AS ChargePeriodStart,
+           MAX(ChargePeriodEnd) AS ChargePeriodEnd,
+           ProviderName,
+           BillingAccountId,
+           CommitmentDiscountId,
+           CommitmentDiscountType,
+           CommitmentDiscountStatus,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND CommitmentDiscountStatus = 'Unused'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             CommitmentDiscountId,
+             CommitmentDiscountType
+allocate_application_multi_currency:
+  title: Allocate multi-currency charges per application
+  slug: allocate-application-multi-currency
+  date_created: '2024-05-08T19:52:49'
+  date_modified: '2025-06-01T20:10:01'
+  status: publish
+  link: https://focus.finops.org/use-case/allocate-application-multi-currency/
+  description: Finance needs to allocate costs and perform chargeback for charges associated with a single application that come from different geographic locations and are in different currencies.
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/allocate-application-multi-currency/
+  sql: |-
+    SELECT Tags["ApplicationId"],
+           ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY Tags["ApplicationId"],
+             ProviderName,
+             BillingAccountId,
+             BillingAccountName,
+             BillingCurrency
+compare_billed_budget:
+  title: Compare billed cost per subaccount to budget
+  slug: compare-billed-budget
+  date_created: '2024-05-08T19:09:01'
+  date_modified: '2025-06-01T20:08:50'
+  status: publish
+  link: https://focus.finops.org/use-case/compare-billed-budget/
+  description: Product wants to confirm charges are in line with expectations (budgets) for a business which has all its cost within a single subaccount. The ChargePeriod is used for filtering to capture items that apply to the period only (excludes adjustments from previous periods that were applied in the current BillingPeriod).
+  focus_versions:
+  - v1.0
+  - v1.1
+  - v1.2
+  source_url: https://focus.finops.org/use-case/compare-billed-budget/
+  sql: |-
+    SELECT ProviderName,
+           SubAccountId,
+           SubAccountName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargeCategory = 'Usage'
+      AND ChargePeriodStart >= ?
+      and ChargePeriodEnd <= ?
+      AND ProviderName = ?
+      AND SubAccountId = ?
+    GROUP BY ProviderName,
+             SubAccountId,
+             SubAccountName
