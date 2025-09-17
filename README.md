@@ -75,11 +75,13 @@ pip install -e .
 
 ### 2. Prepare Your FOCUS Data
 
-This server works with FOCUS billing data in Parquet format with Hive partitioning.
+This server works with FOCUS billing data in Parquet format with Hive partitioning, supporting both local files and S3 storage.
+
+#### Local Data
 
 ```bash
-# Set your data path
-export FOCUS_DATA_PATH="/path/to/your/focus/data"
+# Set your data location for local files
+export FOCUS_DATA_LOCATION="/path/to/your/focus/data"
 
 # Expected structure:
 # /path/to/your/focus/data/
@@ -90,11 +92,35 @@ export FOCUS_DATA_PATH="/path/to/your/focus/data"
 # │   └── ...
 ```
 
+#### S3 Data
+
+```bash
+# Set your data location for S3
+export FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports"
+
+# Optional: Set AWS region (defaults to us-east-1)
+export AWS_REGION="us-west-2"
+
+# Note: Some S3 buckets store files with a leading slash in the path
+# In such cases, you may need a double slash after the bucket name:
+# export FOCUS_DATA_LOCATION="s3://your-bucket//focus/path"
+
+# Authentication happens automatically via AWS credential chain:
+# 1. IAM Role (automatic on EC2/ECS/Lambda)
+# 2. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+# 3. AWS Profile (set AWS_PROFILE env var to use a specific profile)
+# 4. ~/.aws/credentials file
+
+# Example: Use a specific AWS profile
+export AWS_PROFILE="billing-reader"
+```
+
 **Getting FOCUS Data:**
 
-- **AWS**: Enable FOCUS exports in Cost and Billing Preferences
-- **Azure**: Use Cost Management exports with FOCUS format
-- **GCP**: Export billing data in FOCUS format
+- **AWS**: Follow the [official FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/)
+- **Microsoft Azure**: Follow the [official FOCUS setup guide for Microsoft](https://focus.finops.org/get-started/microsoft/)
+- **Google Cloud**: Follow the [official FOCUS setup guide for Google Cloud](https://focus.finops.org/get-started/google-cloud/)
+- **Other Providers**: See [all FOCUS setup guides](https://focus.finops.org/get-started/)
 
 ### 3. Configure MCP Server
 
@@ -113,7 +139,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
         "focus_mcp_server.py"
       ],
       "env": {
-        "FOCUS_DATA_PATH": "/path/to/your/focus/data",
+        "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
         "FOCUS_VERSION": "1.0"
       }
     }
@@ -164,10 +190,36 @@ Claude will use the `get_data_info` tool to inspect your dataset.
 
 ### Environment Variables
 
-| Variable          | Default             | Description                                 |
-| ----------------- | ------------------- | ------------------------------------------- |
-| `FOCUS_DATA_PATH` | `data/focus-export` | Path to your FOCUS parquet data             |
-| `FOCUS_VERSION`   | `1.0`               | FOCUS specification version (1.0, 1.1, 1.2) |
+| Variable              | Default             | Description                                 |
+| --------------------- | ------------------- | ------------------------------------------- |
+| `FOCUS_DATA_LOCATION` | `data/focus-export` | Path to FOCUS data (local or S3 URI)        |
+| `FOCUS_VERSION`       | `1.0`               | FOCUS specification version (1.0, 1.1, 1.2) |
+| `AWS_REGION`          | `us-east-1`         | AWS region for S3 access                    |
+
+### S3 Configuration Example
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/focus-mcp", "python", "focus_mcp_server.py"],
+      "env": {
+        "FOCUS_DATA_LOCATION": "s3://my-billing-bucket/focus-exports",
+        "AWS_REGION": "us-west-2"
+      }
+    }
+  }
+}
+```
+
+The AWS credential chain automatically finds credentials from:
+- IAM roles (when running on AWS infrastructure)
+- Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+- AWS CLI profiles (set AWS_PROFILE env var to specify which profile)
+- AWS credentials file (~/.aws/credentials)
+
+Note: AWS_PROFILE is a standard AWS environment variable that the credential chain respects.
 
 ## Development
 
@@ -176,7 +228,7 @@ Claude will use the `get_data_info` tool to inspect your dataset.
 uv sync --extra dev
 
 # Run locally
-export FOCUS_DATA_PATH="data/focus-export"
+export FOCUS_DATA_LOCATION="data/focus-export"
 uv run python focus_mcp_server.py
 ```
 
@@ -187,3 +239,4 @@ uv run python focus_mcp_server.py
 - [ ] Enhance response formatting with citations and educational context for AI models
 - [ ] Validate all use cases queries against v1.1 and v1.2 exports
 - [ ] Evaluate if moving attributes/columns to MCP resources makes more sense
+- [ ] Review conformance gap documents for additional documentation and insights to share in the responses

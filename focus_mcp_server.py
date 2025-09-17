@@ -106,7 +106,7 @@ mcp = FastMCP(
 )
 
 # Configuration - Load from environment variables via focus_config
-DATA_PATH = focus_config.DATA_PATH
+DATA_LOCATION = focus_config.DATA_LOCATION
 
 # Global database connection - Singleton pattern for performance
 # DuckDB connections are thread-safe and expensive to create, so we reuse one instance
@@ -123,9 +123,10 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
     This function implements a singleton pattern to ensure we only create one
     database connection per server instance. The connection is configured with:
 
-    1. httpfs extension for reading remote files (future use)
-    2. A 'focus_data_table' view that automatically discovers all Parquet files
-       in the configured data directory using Hive partitioning
+    1. httpfs extension for reading remote files (S3, and future: GCS, Azure)
+    2. Cloud credentials configuration when using S3
+    3. A 'focus_data_table' view that automatically discovers all Parquet files
+       in the configured data location (local or S3) using Hive partitioning
 
     The Hive partitioning feature allows DuckDB to automatically understand
     directory structures like 'year=2024/month=01/' commonly used in cloud
@@ -147,13 +148,25 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
         # This enables reading from S3, GCS, or Azure blob storage in the future
         db_connection.execute("INSTALL httpfs; LOAD httpfs;")
 
+        # Parse data location to determine source type
+        from data_source import parse_data_location
+        source_type, location = parse_data_location(DATA_LOCATION)
+
+        # Setup S3 credentials if needed
+        if source_type == "s3":
+            from credentials import setup_s3_credentials
+            setup_s3_credentials(db_connection, region=focus_config.AWS_REGION)
+
         # Create a view that aggregates all FOCUS Parquet files
+        # Works for both local paths and S3 URIs
         # The '**/*.parquet' pattern recursively finds all parquet files
         # hive_partitioning=true enables automatic partition column inference
-        if os.path.exists(DATA_PATH):
+        if source_type == "s3" or os.path.exists(location):
+            # Clean up the path - ensure no trailing slash for consistency
+            clean_location = location.rstrip('/')
             view_query = f"""
                 CREATE OR REPLACE VIEW focus_data_table AS
-                SELECT * FROM read_parquet('{DATA_PATH}/**/*.parquet', hive_partitioning=true)
+                SELECT * FROM read_parquet('{clean_location}/**/*.parquet', hive_partitioning=true)
             """
             db_connection.execute(view_query)
 
@@ -224,8 +237,8 @@ async def get_data_info() -> dict[str, Any]:
             return {
                 "result": {
                     "status": "no_data",
-                    "message": "No FOCUS data loaded. Set FOCUS_DATA_PATH environment variable.",
-                    "data_path": DATA_PATH,
+                    "message": "No FOCUS data loaded. Set FOCUS_DATA_LOCATION environment variable.",
+                    "data_location": DATA_LOCATION,
                 }
             }
 
@@ -255,7 +268,7 @@ async def get_data_info() -> dict[str, Any]:
 
         return {
             "result": {
-                "data_path": DATA_PATH,
+                "data_location": DATA_LOCATION,
                 "row_count": summary[0],
                 "date_range": {
                     "start": str(summary[1]) if summary[1] else None,
