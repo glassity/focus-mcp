@@ -67,3 +67,10 @@ mcp_logs/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Local MCP config
+.mcp.json
+
+# Scripts folder (exclude contents but keep folder)
+scripts/*
+!scripts/.keep

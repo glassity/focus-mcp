@@ -1,166 +1,212 @@
 #!/usr/bin/env python3
 """
-FOCUS Query Library - Dynamic SQL query loader for FOCUS billing analytics.
+FOCUS Query Library - Dynamic query loader for FOCUS billing analytics.
 
 This module provides a structured way to load and manage predefined analytical
 queries for FOCUS (FinOps Open Cost and Usage Specification) billing data.
-Queries are stored as SQL files with embedded metadata and loaded dynamically
-based on the configured FOCUS version.
+Queries are loaded from a comprehensive JSON file containing all use cases
+from focus.finops.org, with automatic filtering based on the configured
+FOCUS version.
 
-The query library supports:
-- Version-specific query collections
-- Metadata extraction from SQL comment headers
-- Parameter binding with ? placeholders
-- Citation tracking for query sources
-
-Query files are expected to follow this format:
--- Query Name Here
--- Description of what the query does
--- Source: https://focus.finops.org/...
-SELECT ...
+The query library provides:
+- Version-specific query filtering (v1.0, v1.1, v1.2)
+- Comprehensive metadata including columns and parameters
+- Parameter descriptions with types and examples
+- Column identification for query validation
+- Source attribution for all queries
 """
 
+import yaml
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
 import focus_config
 
 
 @dataclass
 class Query:
     """
-    Represents a single analytical query with metadata.
+    Represents a single FOCUS analytical query with comprehensive metadata.
 
-    This class encapsulates all information needed to execute and understand
-    a FOCUS billing query, including the SQL text, human-readable description,
-    and source attribution.
+    This class encapsulates all information needed to execute, understand,
+    and validate a FOCUS billing query, including the SQL text and metadata.
 
     Attributes:
         name: Human-readable name of the query
-        description: Brief description of what the query analyzes
+        description: Description of what the query analyzes
         query: The SQL text with ? placeholders for parameters
-        citation: Source URL or reference (typically from focus.finops.org)
-        filename: Original SQL file name for tracking
+        focus_versions: FOCUS specification versions this query supports
+        citation: Source URL from focus.finops.org
+        slug: URL-friendly identifier
     """
     name: str
     description: str
     query: str
+    focus_versions: List[str] = field(default_factory=list)
     citation: str = ""
-    filename: str = ""
+    slug: str = ""
 
 
 class QueryLoader:
     """
-    Manages loading and accessing FOCUS analytical queries.
+    Manages loading and accessing FOCUS analytical queries from JSON.
 
-    This class handles the discovery and parsing of SQL query files from
-    version-specific directories. It extracts metadata from comment headers
-    and provides a simple interface for query retrieval.
+    This class loads all FOCUS use cases from a comprehensive JSON file
+    and filters them based on the configured FOCUS version. It provides
+    rich metadata for each query including columns, parameters, and descriptions.
 
-    The loader automatically discovers queries at initialization and provides
-    methods to access them by name or iterate through all available queries.
+    The loader automatically filters queries at initialization based on
+    the FOCUS_VERSION environment variable and provides methods to access
+    queries by ID, slug, or iterate through all available queries.
     """
 
     def __init__(self):
-        """Initialize the query loader and discover all available queries."""
-        self.queries: dict[str, Query] = {}
+        """Initialize the query loader and load version-specific queries."""
+        self.queries: Dict[str, Query] = {}
+        self.adjustments: Dict[str, dict] = {}  # Store raw adjustments with comments
         self._load_queries()
 
     def _load_queries(self):
         """
-        Discover and load all SQL queries from the version-specific directory.
+        Load all queries from the YAML file and filter by FOCUS version.
 
-        The query loading process:
-        1. Constructs the path based on FOCUS version (e.g., queries_v1_0)
-        2. Scans for all .sql files in that directory
-        3. Parses each file to extract metadata and SQL
-        4. Stores queries indexed by filename (without .sql extension)
+        The loading process:
+        1. Loads the comprehensive YAML file with all use cases
+        2. Loads adjustments from focus_query_adjustments.yaml
+        3. Applies adjustments by overriding fields
+        4. Filters queries based on configured FOCUS_VERSION
+        5. Converts YAML data to Query objects with full metadata
+        6. Indexes queries by slug for flexible access
 
-        This approach allows for different query sets per FOCUS version,
-        accommodating schema changes and new analytical capabilities.
+        This approach provides version-specific query sets while maintaining
+        all metadata from the focus.finops.org website.
         """
-        base_dir = Path("resources/queries")
-        # Convert version like "1.0" to directory name like "queries_v1_0"
-        version_dir = f"queries_v{focus_config.FOCUS_VERSION.replace('.', '_')}"
-        queries_dir = base_dir / version_dir
+        # Find the YAML files in resources/queries
+        package_dir = Path(__file__).parent
+        yaml_file = package_dir / "resources" / "queries" / "focus_use_cases.yaml"
+        adjustments_file = package_dir / "resources" / "queries" / "focus_use_cases_adjustments.yaml"
 
-        if not queries_dir.exists():
-            print(f"Warning: Queries directory {queries_dir} does not exist")
+        if not yaml_file.exists():
+            print(f"Warning: Query file {yaml_file} does not exist")
+            print("Run 'python scrape_to_yaml.py' to generate it")
             return
 
-        # Process all SQL files in the version directory
-        for sql_file in queries_dir.glob("*.sql"):
-            if query := self._parse_file(sql_file):
-                # Use filename without extension as the query identifier
-                self.queries[sql_file.stem] = query
-
-    def _parse_file(self, filepath: Path) -> Query | None:
-        """
-        Parse a single SQL file to extract query metadata and SQL content.
-
-        Expected file format:
-        -- Query Name (first line)
-        -- Optional description lines
-        -- Source: https://focus.finops.org/... (optional)
-        -- Other comment lines
-        SELECT ... (actual SQL starts here)
-
-        The parser separates comment lines (starting with --) from SQL content,
-        extracting key metadata while preserving the executable SQL.
-
-        Args:
-            filepath: Path to the SQL file to parse
-
-        Returns:
-            Query object with parsed metadata and SQL, or None if parsing fails
-        """
         try:
-            content = filepath.read_text()
-            lines = content.split("\n")
+            with open(yaml_file, 'r', encoding='utf-8') as f:
+                all_queries = yaml.safe_load(f)
+        except Exception as e:
+            print(f"Error loading queries from {yaml_file}: {e}")
+            return
 
-            # Extract query name from first comment line
-            # Fall back to filename if no comment header
-            name = lines[0].replace("-- ", "") if lines else filepath.stem
+        # Load adjustments if file exists
+        if adjustments_file.exists():
+            try:
+                with open(adjustments_file, 'r', encoding='utf-8') as f:
+                    self.adjustments = yaml.safe_load(f) or {}
+                print(f"Loaded {len(self.adjustments)} query adjustments")
+            except Exception as e:
+                print(f"Error loading adjustments from {adjustments_file}: {e}")
+                self.adjustments = {}
 
-            # Look for source citation in comment lines
-            source = ""
-            for line in lines:
-                if "Source:" in line:
-                    # Clean up the source line to extract just the URL/reference
-                    source = line.replace("-- Source: ", "").strip()
-                    break
+        # Normalize the configured version (e.g., "1.0" -> "v1.0")
+        configured_version = f"v{focus_config.FOCUS_VERSION}"
 
-            # Extract SQL content by filtering out comment lines
-            # This preserves the executable SQL while removing metadata
-            sql_lines = [line for line in lines if not line.startswith("--")]
-            sql = "\n".join(sql_lines).strip()
+        # Process each query
+        for key, query_data in all_queries.items():
+            # Apply adjustments if they exist for this query
+            if key in self.adjustments:
+                adjustment = self.adjustments[key]
+                # Override fields from adjustment (except fix_comment)
+                for field, value in adjustment.items():
+                    if field != 'fix_comment':
+                        query_data[field] = value
 
-            # Skip empty files or files with only comments
-            if not sql:
-                return None
+            # Filter by FOCUS version
+            focus_versions = query_data.get('focus_versions', [])
+            if configured_version not in focus_versions:
+                continue  # Skip queries not compatible with configured version
 
-            return Query(
-                name=name,
-                description="Query from focus.finops.org",  # Generic description for now
-                query=sql,
-                citation=source,
-                filename=filepath.name,
+            # Create Query object with all metadata
+            query = Query(
+                name=query_data.get('title', ''),
+                description=query_data.get('description', ''),
+                query=query_data.get('sql', ''),
+                focus_versions=focus_versions,
+                citation=query_data.get('source_url', ''),
+                slug=query_data.get('slug', key)
             )
 
-        except Exception as e:
-            print(f"Error parsing {filepath}: {e}")
-            return None
+            # Index by slug (key)
+            self.queries[key] = query
 
-    def get_query(self, query_name: str) -> Query | None:
+        print(f"Loaded {len(self.queries)} queries for FOCUS {focus_config.FOCUS_VERSION}")
+
+    def get_query(self, query_identifier: str) -> Optional[Query]:
         """
-        Retrieve a specific query by its identifier.
+        Retrieve a specific query by its slug identifier.
 
         Args:
-            query_name: The query identifier (filename without .sql extension)
+            query_identifier: The query slug (underscore-separated key)
 
         Returns:
             Query object if found, None otherwise
         """
-        return self.queries.get(query_name)
+        return self.queries.get(query_identifier)
+
+    def list_queries(self) -> List[Dict[str, str]]:
+        """
+        List all available queries with basic metadata.
+
+        Returns:
+            List of dictionaries with query metadata for display
+        """
+        return [
+            {
+                'slug': query.slug,
+                'name': query.name,
+                'description': query.description or 'No description available',
+                'parameter_count': query.query.count('?'),
+                'versions': ', '.join(query.focus_versions)
+            }
+            for query in self.queries.values()
+        ]
+
+    def get_query_info(self, query: Query) -> str:
+        """
+        Generate comprehensive information about a query for the LLM.
+
+        This method creates a detailed description of the query that helps
+        the LLM understand what parameters are needed and how to use the query.
+
+        Args:
+            query: The Query object to describe
+
+        Returns:
+            Formatted string with complete query information
+        """
+        info = []
+        info.append(f"Query: {query.name}")
+
+        if query.description:
+            info.append(f"Description: {query.description}")
+
+        info.append(f"\nFOCUS Versions: {', '.join(query.focus_versions)}")
+
+        # Just show parameter count from SQL
+        param_count = query.query.count('?')
+        if param_count > 0:
+            info.append(f"\nParameters Required: {param_count}")
+
+        # Add SQL preview
+        sql_preview = query.query[:200] + "..." if len(query.query) > 200 else query.query
+        info.append(f"\nSQL Preview:")
+        info.append(sql_preview)
+
+        # Add source
+        if query.citation:
+            info.append(f"\nSource: {query.citation}")
+
+        return "\n".join(info)
 
 
 # Global query loader instance

@@ -1,0 +1,215 @@
+# Query Adjustments for FOCUS Use Cases
+# This file contains fixes and adjustments to queries from focus_use_cases.yaml
+# Each entry can override any field from the original query
+# The fix_comment field explains why the adjustment was necessary
+
+costs_service_name:
+  fix_comment: "MonthlyCost column does not exist in any version of FOCUS specification. Changed ORDER BY to use TotalEffectiveCost which is the calculated aggregate."
+  sql: |-
+    SELECT BillingPeriodStart,
+           ProviderName,
+           SubAccountId,
+           SubAccountName,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ServiceName = ?
+      AND BillingPeriodStart >= ?
+      AND BillingPeriodStart < ?
+    GROUP BY BillingPeriodStart,
+             ProviderName,
+             SubAccountId,
+             SubAccountName,
+             ServiceName
+    ORDER BY TotalEffectiveCost DESC
+
+application_cost:
+  fix_comment: "DuckDB does not support Tags[\"Application\"] syntax for JSON field access. Changed to use Tags->>'Application' which is the correct DuckDB JSON extraction syntax."
+  sql: |-
+    SELECT MONTH(BillingPeriodStart),
+           ServiceName,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE Tags->>'Application' = ?
+      AND ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+    GROUP BY MONTH(BillingPeriodStart),
+             ServiceName
+
+commitment_discount_purchases:
+  fix_comment: "CommitmentDiscountUnit column only exists in FOCUS v1.1 and v1.2, not in v1.0. Updated focus_versions to exclude v1.0."
+  focus_versions:
+    - v1.1
+    - v1.2
+
+effective_savings_rate_services:
+  fix_comment: "SQL syntax error - space in alias name 'AS Total ContractedCost'. Fixed to 'AS TotalContractedCost' without space."
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           SUM(ContractedCost) AS TotalContractedCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost,
+           ((SUM(ContractedCost) - SUM(EffectiveCost)) / SUM(ContractedCost)) AS EffectiveSavingsRate
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             ServiceName
+
+analyze_tag_coverage:
+  fix_comment: "JSON_CONTAINS_PATH is not supported in DuckDB. Replaced with json_extract_string to check if a tag exists. The '$.?' placeholder is replaced with '$.' || ? to dynamically build the JSON path."
+  sql: |-
+    SELECT SUM(CASE
+                   WHEN json_extract_string(Tags, '$.' || ?) IS NOT NULL THEN EffectiveCost
+                   ELSE 0
+               END) / SUM(EffectiveCost) * 100 AS TaggedPercentage
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND EffectiveCost > 0
+      AND ProviderName = ?
+
+report_service_costs_by_providers_subaccount:
+  fix_comment: "GROUP BY issue - ORDER BY references BillingPeriodStart which is not in GROUP BY. Changed to ChargePeriodStart which is in the GROUP BY clause."
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           SubAccountId,
+           ChargePeriodStart,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+      AND SubAccountId = ?
+      AND ProviderName = ?
+    GROUP BY ProviderName,
+             ServiceName,
+             SubAccountId,
+             ChargePeriodStart
+    ORDER BY SUM(EffectiveCost),
+             ChargePeriodStart DESC
+
+daily_anomaly_services:
+  fix_comment: "SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart)."
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName,
+           ServiceName,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart),
+             ProviderName,
+             SubAccountId,
+             RegionId,
+             RegionName,
+             ServiceName
+
+daily_anomaly_region:
+  fix_comment: "SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart)."
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart),
+             ProviderName,
+             SubAccountId,
+             RegionId,
+             RegionName
+
+daily_anomaly_subaccount:
+  fix_comment: "SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart)."
+  sql: |-
+    SELECT DATE(ChargePeriodStart) AS Day,
+           ProviderName,
+           SubAccountId,
+           SUM(EffectiveCost) AS DailyEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY DATE(ChargePeriodStart),
+             ProviderName,
+             SubAccountId
+
+update_application_budgets:
+  fix_comment: "SQL syntax error - missing comma between 'AS Application' and 'SUM(BilledCost)'. Also fixed JSON syntax for DuckDB."
+  sql: |-
+    SELECT ProviderName,
+           BillingPeriodStart,
+           BillingPeriodEnd,
+           Tags->>'Application' AS Application,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY ProviderName,
+             BillingPeriodStart,
+             BillingPeriodEnd,
+             Tags->>'Application'
+
+forecast_cashflow:
+  fix_comment: "SQL syntax error - missing comma between 'ServiceName' and 'SUM(BilledCost)'."
+  sql: |-
+    SELECT MONTH(BillingPeriodStart),
+           ProviderName,
+           ServiceCategory,
+           ServiceName,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY MONTH(BillingPeriodStart),
+             ProviderName,
+             ServiceCategory,
+             ServiceName
+
+identify_unused_commitments:
+  fix_comment: "GROUP BY issue - CommitmentDiscountStatus is in SELECT but not in GROUP BY. Added it to GROUP BY clause."
+  sql: |-
+    SELECT MIN(ChargePeriodStart) AS ChargePeriodStart,
+           MAX(ChargePeriodEnd) AS ChargePeriodEnd,
+           ProviderName,
+           BillingAccountId,
+           CommitmentDiscountId,
+           CommitmentDiscountType,
+           CommitmentDiscountStatus,
+           SUM(BilledCost) AS TotalBilledCost,
+           SUM(EffectiveCost) AS TotalEffectiveCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      AND ChargePeriodEnd < ?
+      AND CommitmentDiscountStatus = 'Unused'
+    GROUP BY ProviderName,
+             BillingAccountId,
+             CommitmentDiscountId,
+             CommitmentDiscountType,
+             CommitmentDiscountStatus
+
+allocate_application_multi_currency:
+  fix_comment: "DuckDB does not support Tags[\"ApplicationId\"] syntax for JSON field access. Changed to use Tags->>'ApplicationId' which is the correct DuckDB JSON extraction syntax."
+  sql: |-
+    SELECT Tags->>'ApplicationId',
+           ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE BillingPeriodStart >= ?
+      AND BillingPeriodEnd < ?
+    GROUP BY Tags->>'ApplicationId',
+             ProviderName,
+             BillingAccountId,
+             BillingAccountName,
+             BillingCurrency

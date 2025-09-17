@@ -32,7 +32,7 @@ import os
 DATA_PATH = os.getenv("FOCUS_DATA_PATH", "data/focus-export")
 
 # FOCUS specification version
-# Determines which query directory to load from resources/queries/
-# Version "1.0" maps to directory "queries_v1_0"
-# This allows supporting multiple FOCUS versions with different schemas
+# Determines which queries are available based on their focus_versions field
+# Queries are filtered from the unified YAML file at runtime
+# This allows supporting multiple FOCUS versions with version-specific query sets
 FOCUS_VERSION = os.getenv("FOCUS_VERSION", "1.0")

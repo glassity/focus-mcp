@@ -27,6 +27,7 @@ from mcp.server.fastmcp import FastMCP
 
 import focus_config
 from focus_queries import focus_queries
+from focus_spec_loader import FocusSpecLoader
 
 # Initialize MCP server with FOCUS-specific instructions
 # FastMCP provides a simplified interface for creating MCP servers
@@ -35,19 +36,72 @@ mcp = FastMCP(
     instructions="""
     # FOCUS Billing Analytics Server
 
+    ## Database Engine
+
+    This server uses DuckDB as its SQL engine. Custom queries must follow DuckDB SQL syntax.
+    The main table is named 'focus_data_table' and contains all FOCUS billing data loaded from Parquet files.
+
     ## Best Practices
 
     - Start with get_data_info to understand the loaded data
     - Use list_use_cases to explore predefined queries
     - Use get_use_case to see details before executing a predefined query, including parameters needed
     - Use execute_query to run SQL or predefined queries
+    - Use list_columns and get_column_details to understand the FOCUS schema
+    - Query distinct values to discover valid parameters (e.g., SELECT DISTINCT ServiceName)
 
     ## Tool Usage Guide
 
-    Use get_data_info to show what data is loaded
-    Use list_use_cases to browse available predefined queries
-    Use get_use_case to get detailed info about a specific query
-    Use execute_query to run SQL or predefined queries
+    1. **Data Discovery**
+       - get_data_info: Overview of loaded data (row count, date range, providers)
+       - list_columns: Browse all FOCUS columns with metadata
+       - get_column_details: Detailed info for specific columns including data types
+
+    2. **Query Execution**
+       - list_use_cases: Browse 36+ predefined FinOps queries
+       - get_use_case: View SQL and parameters for a specific query
+       - execute_query: Run custom SQL or predefined queries with parameters
+
+    3. **Schema & Standards**
+       - list_attributes: View FOCUS formatting standards
+       - get_attribute_details: Detailed requirements for data formatting
+
+    ## Documentation Deep Dive
+
+    The server provides comprehensive documentation through column and attribute details:
+
+    **Cost Metrics Explained** (use get_column_details):
+    - BilledCost: Basis for invoicing, includes discounts but excludes amortization
+    - EffectiveCost: Amortized cost after all discounts and prepaid purchases
+    - ContractedCost: Cost based on negotiated pricing (contracted unit price × quantity)
+    - ListCost: Cost at list prices without any discounts
+
+    **Date/Time Handling** (use get_attribute_details for 'date_time_format'):
+    - All dates in UTC format
+    - ISO 8601 format with timezone (e.g., 2025-05-01T02:00:00+02:00)
+    - Start dates are inclusive, end dates are exclusive
+    - BillingPeriod: When charges appear on invoice
+    - ChargePeriod: When usage actually occurred
+
+    **Charge Categories** (use get_column_details for 'ChargeCategory'):
+    - Usage: Charges for actual resource consumption
+    - Purchase: Upfront commitment purchases
+    - Tax: Tax charges
+    - Adjustment: Corrections and credits
+
+    ## Parameter Format Examples
+
+    - Dates: '2025-01-01' or '2025-01-01T00:00:00Z'
+    - Service names: Exact match required, query distinct values first
+    - SubAccountId: String format, even if numeric
+    - Multiple parameters: Pass as list ['param1', 'param2', 'param3']
+
+    ## Parameter Discovery Tips
+
+    - For enum columns (e.g., ChargeCategory), run: SELECT DISTINCT column_name FROM focus_data_table
+    - For date ranges, check get_data_info for available period
+    - For service names, query: SELECT DISTINCT ServiceName FROM focus_data_table
+    - For valid SubAccounts: SELECT DISTINCT SubAccountId, SubAccountName FROM focus_data_table
     """,
 )
 
@@ -58,6 +112,9 @@ DATA_PATH = focus_config.DATA_PATH
 # DuckDB connections are thread-safe and expensive to create, so we reuse one instance
 db_connection: Optional[duckdb.DuckDBPyConnection] = None
 
+# Global specification loader - Singleton for cached spec data
+spec_loader: Optional[FocusSpecLoader] = None
+
 
 def get_db_connection() -> duckdb.DuckDBPyConnection:
     """
@@ -67,7 +124,7 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
     database connection per server instance. The connection is configured with:
 
     1. httpfs extension for reading remote files (future use)
-    2. A 'focus_data' view that automatically discovers all Parquet files
+    2. A 'focus_data_table' view that automatically discovers all Parquet files
        in the configured data directory using Hive partitioning
 
     The Hive partitioning feature allows DuckDB to automatically understand
@@ -95,12 +152,27 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
         # hive_partitioning=true enables automatic partition column inference
         if os.path.exists(DATA_PATH):
             view_query = f"""
-                CREATE OR REPLACE VIEW focus_data AS
+                CREATE OR REPLACE VIEW focus_data_table AS
                 SELECT * FROM read_parquet('{DATA_PATH}/**/*.parquet', hive_partitioning=true)
             """
             db_connection.execute(view_query)
 
     return db_connection
+
+
+def get_spec_loader() -> FocusSpecLoader:
+    """
+    Get or create the FOCUS specification loader.
+
+    Returns:
+        FocusSpecLoader instance for accessing column and attribute definitions
+    """
+    global spec_loader
+
+    if spec_loader is None:
+        spec_loader = FocusSpecLoader()
+
+    return spec_loader
 
 
 def format_query_results(rows, columns, limit):
@@ -142,10 +214,10 @@ async def get_data_info() -> dict[str, Any]:
     try:
         conn = get_db_connection()
 
-        # Check if the focus_data view was successfully created
+        # Check if the focus_data_table view was successfully created
         # This indicates whether data files were found and loaded
         view_check = conn.execute(
-            "SELECT * FROM information_schema.tables WHERE table_name = 'focus_data'"
+            "SELECT * FROM information_schema.tables WHERE table_name = 'focus_data_table'"
         ).fetchone()
 
         if not view_check:
@@ -167,18 +239,18 @@ async def get_data_info() -> dict[str, Any]:
                 COUNT(DISTINCT ProviderName) as provider_count,
                 COUNT(DISTINCT ServiceName) as service_count,
                 ROUND(SUM(EffectiveCost), 2) as total_cost
-            FROM focus_data
+            FROM focus_data_table
         """
         summary = conn.execute(summary_query).fetchone()
 
         # Get complete column list to understand data schema
         # Useful for users to know what fields are available for analysis
-        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data'"
+        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data_table'"
         columns = [row[0] for row in conn.execute(columns_query).fetchall()]
 
         # Sample cloud providers to give users context about data sources
         # Limited to 10 to avoid overwhelming output while providing useful examples
-        providers_query = "SELECT DISTINCT ProviderName FROM focus_data LIMIT 10"
+        providers_query = "SELECT DISTINCT ProviderName FROM focus_data_table LIMIT 10"
         providers = [row[0] for row in conn.execute(providers_query).fetchall()]
 
         return {
@@ -230,11 +302,10 @@ async def list_use_cases() -> dict[str, Any]:
         use_cases = []
         for query in all_queries:
             use_case = {
-                "id": query.filename.replace(".sql", "")
-                if query.filename
-                else query.name,
+                "id": query.slug,
                 "name": query.name,
-                "description": query.description,
+                "description": query.description or "No description available",
+                "parameter_count": query.query.count('?'),
             }
             use_cases.append(use_case)
 
@@ -272,26 +343,30 @@ async def get_use_case(
     """
     try:
         # Retrieve the query template from the loaded queries
+        # Try both formats: with underscores (key) and with hyphens (slug)
         query_template = focus_queries.get_query(use_case_id)
+        if not query_template:
+            # Try converting hyphens to underscores
+            alt_id = use_case_id.replace("-", "_")
+            query_template = focus_queries.get_query(alt_id)
+
         if not query_template:
             return {"error": f"Use case not found: {use_case_id}"}
 
-        # Count parameter placeholders to help users understand requirements
-        # Each ? in the SQL requires a corresponding parameter value
-        param_count = query_template.query.count("?")
-
-        return {
-            "result": {
-                "id": use_case_id,
-                "name": query_template.name,
-                "description": query_template.description,
-                "sql": query_template.query,
-                "parameter_count": param_count,
-                "citation": query_template.citation
-                if hasattr(query_template, "citation")
-                else None,
-            }
+        # Build comprehensive query information
+        result = {
+            "id": use_case_id,
+            "name": query_template.name,
+            "description": query_template.description or "No description available",
+            "sql": query_template.query,
+            "focus_versions": query_template.focus_versions,
+            "citation": query_template.citation,
         }
+
+        # Show parameter count from SQL
+        result["parameter_count"] = query_template.query.count("?")
+
+        return {"result": result}
     except Exception as e:
         return {"error": str(e)}
 
@@ -347,7 +422,13 @@ async def execute_query(
         # Determine SQL to execute and gather metadata
         if use_case:
             # Load predefined query from the query library
+            # Try both formats: with hyphens (slug) and with underscores (key)
             query_template = focus_queries.get_query(use_case)
+            if not query_template:
+                # Try converting hyphens to underscores
+                alt_id = use_case.replace("-", "_")
+                query_template = focus_queries.get_query(alt_id)
+
             if not query_template:
                 return {
                     "error": f"Use case not found: {use_case}. Use 'list_use_cases' to see available queries."
@@ -362,9 +443,9 @@ async def execute_query(
             param_count = sql.count("?")
             if param_count > 0:
                 if not parameters:
-                    return {
-                        "error": f"Query requires {param_count} parameters but none provided. Use 'get_use_case' with id '{use_case}' to see parameter requirements."
-                    }
+                    error_msg = f"Query '{query_name}' requires {param_count} parameters but none provided.\n"
+                    error_msg += f"Use 'get_use_case' with id '{use_case}' to see the SQL query and identify parameter requirements."
+                    return {"error": error_msg}
 
                 # Normalize parameters to list format for consistent binding
                 # List format is preferred for positional parameter binding
@@ -428,6 +509,278 @@ async def execute_query(
             response["truncated"] = True
 
         return {"result": response}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def list_columns(
+    version: Optional[str] = Field(None, description="FOCUS version (e.g., '1.0', '1.1', '1.2'). Uses configured version if not specified."),
+    feature_level: Optional[str] = Field(None, description="Filter by feature level: Mandatory, Conditional, or Optional"),
+    column_type: Optional[str] = Field(None, description="Filter by column type: Dimension or Metric"),
+) -> dict[str, Any]:
+    """
+    List all FOCUS columns with their basic metadata.
+
+    This tool provides a comprehensive list of all columns defined in the FOCUS
+    specification for a given version. You can filter the results by feature level
+    (Mandatory/Conditional/Optional) or column type (Dimension/Metric).
+
+    Use this to discover available columns before querying billing data or to
+    understand the schema structure of FOCUS datasets.
+
+    Args:
+        version: FOCUS version to query (defaults to configured version)
+        feature_level: Optional filter for column requirement level
+        column_type: Optional filter for column type
+
+    Returns:
+        Dictionary containing list of columns with metadata
+    """
+    try:
+        loader = get_spec_loader()
+
+        # Use configured version if not specified
+        if not version:
+            version = focus_config.FOCUS_VERSION
+
+        # Ensure version is a string without 'v' prefix
+        version = str(version).lstrip('v')
+
+        # Get columns - ensure None values are passed correctly
+        columns = loader.get_columns(
+            version=version,
+            feature_level=feature_level if isinstance(feature_level, str) else None,
+            column_type=column_type if isinstance(column_type, str) else None
+        )
+
+        # Handle case where no spec data is available
+        if not columns:
+            return {
+                "result": {
+                    "version": version,
+                    "total_columns": 0,
+                    "filters_applied": {
+                        "feature_level": feature_level,
+                        "column_type": column_type
+                    },
+                    "columns": [],
+                    "warning": "No FOCUS specification data available. Column definitions may need to be generated."
+                }
+            }
+
+        # Convert to response format
+        columns_list = [
+            {
+                'column_id': col.get('column_id', ''),
+                'display_name': col.get('display_name', ''),
+                'data_type': col.get('data_type', ''),
+                'feature_level': col.get('feature_level', ''),
+                'column_type': col.get('column_type', ''),
+                'introduced_version': col.get('introduced_version', '')
+            }
+            for col in columns
+        ]
+
+        return {
+            "result": {
+                "version": version,
+                "total_columns": len(columns),
+                "filters_applied": {
+                    "feature_level": feature_level,
+                    "column_type": column_type
+                },
+                "columns": columns_list
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def get_column_details(
+    column_ids: list[str] = Field(..., description="List of column IDs or names to get details for"),
+    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+) -> dict[str, Any]:
+    """
+    Get detailed information for specific FOCUS columns.
+
+    This tool provides comprehensive metadata for one or more columns including:
+    - Column ID and display name
+    - Description and purpose
+    - Data type and format
+    - Feature level (Mandatory/Conditional/Optional)
+    - Column type (Dimension/Metric)
+    - Null handling
+    - Version introduced
+    - Any special requirements or constraints
+
+    Use this when you need detailed information about specific columns before
+    writing queries or understanding data semantics.
+
+    Args:
+        column_ids: List of column IDs (e.g., 'BillingAccountId') or names (e.g., 'Billing Account ID')
+        version: FOCUS version to query
+
+    Returns:
+        Dictionary containing detailed column definitions
+    """
+    try:
+        loader = get_spec_loader()
+
+        # Use configured version if not specified
+        if not version:
+            version = focus_config.FOCUS_VERSION
+
+        version = str(version).lstrip('v')
+
+        # Get detailed information using new API
+        details = []
+        for col_id in column_ids:
+            col = loader.find_column(col_id, version=version)
+            if col:
+                details.append(col)
+            else:
+                details.append({
+                    'column_id': col_id,
+                    'error': f'Column not found: {col_id}'
+                })
+
+        return {
+            "result": {
+                "version": version,
+                "requested_columns": column_ids,
+                "found": len([d for d in details if 'error' not in d]),
+                "not_found": len([d for d in details if 'error' in d]),
+                "details": details
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def list_attributes(
+    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+) -> dict[str, Any]:
+    """
+    List all FOCUS attributes that apply across the specification.
+
+    Attributes are cross-cutting requirements that apply to multiple columns or
+    the entire dataset. They define formatting standards, data handling rules,
+    and other conventions that ensure consistency across FOCUS implementations.
+
+    Common attributes include:
+    - Currency Format: How monetary values should be formatted
+    - Date/Time Format: ISO 8601 standards for temporal data
+    - Null Handling: How missing values should be represented
+    - String Handling: Character encoding and length constraints
+    - Numeric Format: Precision and scale requirements
+
+    Returns:
+        Dictionary containing list of all FOCUS attributes
+    """
+    try:
+        loader = get_spec_loader()
+
+        # Use configured version if not specified
+        if not version:
+            version = focus_config.FOCUS_VERSION
+
+        version = str(version).lstrip('v')
+
+        # Get attributes using new API
+        attributes = loader.get_attributes(version=version)
+
+        # Handle case where no spec data is available
+        if not attributes:
+            return {
+                "result": {
+                    "version": version,
+                    "total_attributes": 0,
+                    "attributes": [],
+                    "warning": "No FOCUS specification data available. Attribute definitions may need to be generated."
+                }
+            }
+
+        # Convert to response format
+        attributes_list = [
+            {
+                'attribute_id': attr.get('attribute_id', ''),
+                'name': attr.get('name', ''),
+                'description': attr.get('description', '')[:200] + '...'
+                    if len(attr.get('description', '')) > 200
+                    else attr.get('description', '')
+            }
+            for attr in attributes
+        ]
+
+        return {
+            "result": {
+                "version": version,
+                "total_attributes": len(attributes),
+                "attributes": attributes_list
+            }
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+async def get_attribute_details(
+    attribute_ids: list[str] = Field(..., description="List of attribute IDs or names to get details for"),
+    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+) -> dict[str, Any]:
+    """
+    Get detailed information for specific FOCUS attributes.
+
+    This tool provides comprehensive information about FOCUS attributes including:
+    - Full description and purpose
+    - Specific requirements and constraints
+    - Affected columns or data types
+    - Examples and edge cases
+    - Implementation guidance
+
+    Use this when you need to understand how to properly format or handle
+    data according to FOCUS specifications.
+
+    Args:
+        attribute_ids: List of attribute IDs or names (e.g., 'currency_format', 'Currency Format')
+        version: FOCUS version to query
+
+    Returns:
+        Dictionary containing detailed attribute specifications
+    """
+    try:
+        loader = get_spec_loader()
+
+        # Use configured version if not specified
+        if not version:
+            version = focus_config.FOCUS_VERSION
+
+        version = str(version).lstrip('v')
+
+        # Get detailed information using new API
+        details = []
+        for attr_id in attribute_ids:
+            attr = loader.find_attribute(attr_id, version=version)
+            if attr:
+                details.append(attr)
+            else:
+                details.append({
+                    'attribute_id': attr_id,
+                    'error': f'Attribute not found: {attr_id}'
+                })
+
+        return {
+            "result": {
+                "version": version,
+                "requested_attributes": attribute_ids,
+                "found": len([d for d in details if 'error' not in d]),
+                "not_found": len([d for d in details if 'error' in d]),
+                "details": details
+            }
+        }
     except Exception as e:
         return {"error": str(e)}
 

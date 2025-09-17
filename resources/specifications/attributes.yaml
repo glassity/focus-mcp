@@ -1,0 +1,54 @@
+- name: Column Handling
+  attribute_id: column_handling
+  description: Naming and ordering convention for columns appearing in a *FOCUS dataset*.
+  requirements:
+  - '### Column Names'
+  introduced_version: '0.5'
+- name: Currency Format
+  attribute_id: currency_format
+  description: Formatting for currency columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
+  requirements:
+  - '* Currency-related columns MUST be represented as a three-letter alphabetic code as dictated in the governing document [ISO 4217:2015](https://www.iso.org/standard/64758.html) when the value is presented in national currency (e.g., USD, EUR).'
+  introduced_version: '0.5'
+- name: Date/Time Format
+  attribute_id: date_time_format
+  description: Rules and formatting requirements for date/time-related columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
+  requirements:
+  - '* Date/time values MUST be in UTC (Coordinated Universal Time) to avoid ambiguity and ensure consistency across different time zones.'
+  introduced_version: '0.5'
+- name: Discount Handling
+  attribute_id: discount_handling
+  description: Indicates how to include and apply discounts to usage charges or rows in a FOCUS dataset.
+  requirements:
+  - '* All applicable discounts SHOULD be applied to each row they pertain to and SHOULD NOT be negated in a separate row.'
+  introduced_version: 1.0-preview
+- name: Key-Value Format
+  attribute_id: key-value_format
+  description: Rules and formatting requirements for columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset) that convey data as key-value pairs.
+  requirements:
+  - '* Key-Value Format columns MUST contain a serialized JSON string, consistent with the [ECMA 404](https://www.ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf) definition of an object.'
+  introduced_version: 1.0-preview
+- name: Null Handling
+  attribute_id: null_handling
+  description: Indicates how to handle columns that don't have a value.
+  requirements:
+  - '* Columns MUST use NULL when there isn''t a value that can be specified for a nullable column.'
+  introduced_version: '0.5'
+- name: Numeric Format
+  attribute_id: numeric_format
+  description: Rules and formatting requirements for numeric columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
+  requirements:
+  - '* Columns with a Numeric value format MUST contain a single numeric value.'
+  introduced_version: 1.0-preview
+- name: String Handling
+  attribute_id: string_handling
+  description: Requirements for string-capturing columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
+  requirements:
+  - '* String values MUST maintain the original casing, spacing, and other relevant consistency factors as specified by providers and end-users.'
+  introduced_version: '1.0'
+- name: Unit Format
+  attribute_id: unit_format
+  description: Indicates standards for expressing measurement units in columns appearing in a *FOCUS dataset*.
+  requirements:
+  - '* Units SHOULD be expressed as a single unit of measure adhering to one of the following three formats.'
+  introduced_version: 1.0-preview
