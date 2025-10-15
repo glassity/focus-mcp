@@ -53,12 +53,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             # Tag with major for releases (v1.0.0 -> 1)
             type=semver,pattern={{major}}
-            # Tag with branch name for PRs
-            type=ref,event=branch
             # Tag with PR number for PRs
             type=ref,event=pr
-            # Tag with SHA for all events
-            type=sha,prefix={{branch}}-
+            # Tag with branch name (sanitized)
+            type=ref,event=branch
+            # Tag with short SHA
+            type=sha
 
       - name: Build and push Docker image
         id: push
