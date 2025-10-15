@@ -223,6 +223,144 @@ The AWS credential chain automatically finds credentials from:
 
 Note: AWS_PROFILE is a standard AWS environment variable that the credential chain respects.
 
+## Docker Usage
+
+### Using Pre-built Images
+
+The server is available as a Docker image on GitHub Container Registry:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/glassity/focus-mcp:latest
+
+# Or use a specific version
+docker pull ghcr.io/glassity/focus-mcp:v0.1.1
+```
+
+### Running with Docker
+
+#### Local FOCUS Data
+
+```bash
+# Run with local data mounted
+docker run -i --rm \
+  -v "/path/to/your/focus/data:/data:ro" \
+  -e FOCUS_DATA_LOCATION=/data \
+  -e FOCUS_VERSION=1.0 \
+  ghcr.io/glassity/focus-mcp:latest
+```
+
+#### S3 FOCUS Data
+
+**Using AWS credentials from environment:**
+
+```bash
+docker run -i --rm \
+  -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
+  -e AWS_REGION="us-west-2" \
+  -e AWS_ACCESS_KEY_ID="your-access-key" \
+  -e AWS_SECRET_ACCESS_KEY="your-secret-key" \
+  ghcr.io/glassity/focus-mcp:latest
+```
+
+**Using AWS profile (recommended for multiple profiles):**
+
+```bash
+docker run -i --rm \
+  -v "$HOME/.aws:/home/mcp/.aws:ro" \
+  -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
+  -e AWS_REGION="us-west-2" \
+  -e AWS_PROFILE="billing-reader" \
+  ghcr.io/glassity/focus-mcp:latest
+```
+
+### Using with Claude Desktop
+
+Configure Claude Desktop to use the Docker image in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        "/path/to/your/focus/data:/data:ro",
+        "-e",
+        "FOCUS_DATA_LOCATION=/data",
+        "-e",
+        "FOCUS_VERSION=1.0",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**For S3 data with environment variables:**
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
+        "-e", "AWS_REGION=us-west-2",
+        "-e", "AWS_ACCESS_KEY_ID=your-access-key",
+        "-e", "AWS_SECRET_ACCESS_KEY=your-secret-key",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**For S3 data with AWS profile:**
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v", "/Users/YOUR_USERNAME/.aws:/home/mcp/.aws:ro",
+        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
+        "-e", "AWS_REGION=us-west-2",
+        "-e", "AWS_PROFILE=billing-reader",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+### Building Your Own Image
+
+```bash
+# Clone the repository
+git clone https://github.com/glassity/focus-mcp.git
+cd focus-mcp
+
+# Build the image
+docker build -t focus-mcp:custom .
+
+# Run your custom image
+docker run -i --rm \
+  -v "/path/to/your/focus/data:/data:ro" \
+  -e FOCUS_DATA_LOCATION=/data \
+  focus-mcp:custom
+```
+
 ## Development
 
 ```bash
