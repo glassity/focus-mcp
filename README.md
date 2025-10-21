@@ -1,5 +1,15 @@
 # FOCUS MCP Server
 
+<p align="center">
+  <a href="https://glassity.cloud">
+    <img src=".github/banner.png" alt="Glassity - Cloud Cost Visibility and Optimization" width="400" />
+  </a>
+  <br />
+  <strong>Get comprehensive cloud cost visibility and optimization insights at <a href="https://glassity.cloud">glassity.cloud</a></strong>
+</p>
+
+---
+
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FOCUS v1.0](https://img.shields.io/badge/FOCUS%20v1.0-36%20queries-blue.svg)](https://focus.finops.org/)
 [![FOCUS v1.1](https://img.shields.io/badge/FOCUS%20v1.1-41%20queries-green.svg)](https://focus.finops.org/)
