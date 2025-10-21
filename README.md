@@ -59,21 +59,7 @@ The server provides:
 
 ## Quick Start
 
-### 1. Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/glassity/focus-mcp.git
-cd focus-mcp
-
-# Install with uv (recommended)
-uv sync
-
-# Or install with pip
-pip install -e .
-```
-
-### 2. Prepare Your FOCUS Data
+### 1. Prepare Your FOCUS Data
 
 This server works with FOCUS billing data in Parquet format with Hive partitioning, supporting both local files and S3 storage.
 
@@ -122,32 +108,93 @@ export AWS_PROFILE="billing-reader"
 - **Google Cloud**: Follow the [official FOCUS setup guide for Google Cloud](https://focus.finops.org/get-started/google-cloud/)
 - **Other Providers**: See [all FOCUS setup guides](https://focus.finops.org/get-started/)
 
-### 3. Configure MCP Server
+### 2. Install & Configure with Docker (Recommended)
+
+The server is available as a Docker image on GitHub Container Registry.
+
+#### Pull the Docker Image
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/glassity/focus-mcp:latest
+
+# Or use a specific version
+docker pull ghcr.io/glassity/focus-mcp:v0.1.1
+```
+
+#### Configure Claude Desktop
 
 Add to your Claude Desktop `claude_desktop_config.json`:
+
+**For local FOCUS data:**
 
 ```json
 {
   "mcpServers": {
     "focus": {
-      "command": "uv",
+      "command": "docker",
       "args": [
         "run",
-        "--directory",
-        "/path/to/focus-mcp",
-        "python",
-        "focus_mcp_server.py"
-      ],
-      "env": {
-        "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
-        "FOCUS_VERSION": "1.0"
-      }
+        "-i",
+        "--rm",
+        "-v",
+        "/path/to/your/focus/data:/data:ro",
+        "-e",
+        "FOCUS_DATA_LOCATION=/data",
+        "-e",
+        "FOCUS_VERSION=1.0",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
     }
   }
 }
 ```
 
-### 4. Test the Connection
+**For S3 data with AWS credentials:**
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
+        "-e", "AWS_REGION=us-west-2",
+        "-e", "AWS_ACCESS_KEY_ID=your-access-key",
+        "-e", "AWS_SECRET_ACCESS_KEY=your-secret-key",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+**For S3 data with AWS profile:**
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v", "/Users/YOUR_USERNAME/.aws:/home/mcp/.aws:ro",
+        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
+        "-e", "AWS_REGION=us-west-2",
+        "-e", "AWS_PROFILE=billing-reader",
+        "ghcr.io/glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+### 3. Test the Connection
 
 Start Claude Desktop and try:
 
@@ -157,7 +204,7 @@ Can you show me information about my FOCUS data?
 
 Claude will use the `get_data_info` tool to inspect your dataset.
 
-## Usage Examples
+### 4. Usage Examples
 
 ```
 # Inspect your data
@@ -223,26 +270,80 @@ The AWS credential chain automatically finds credentials from:
 
 Note: AWS_PROFILE is a standard AWS environment variable that the credential chain respects.
 
-## Docker Usage
+## Development
 
-### Using Pre-built Images
+For developers who want to contribute or customize the server:
 
-The server is available as a Docker image on GitHub Container Registry:
+### Installation from Source
 
 ```bash
-# Pull the latest image
-docker pull ghcr.io/glassity/focus-mcp:latest
+# Clone the repository
+git clone https://github.com/glassity/focus-mcp.git
+cd focus-mcp
 
-# Or use a specific version
-docker pull ghcr.io/glassity/focus-mcp:v0.1.1
+# Install with uv (recommended)
+uv sync
+
+# Or install with pip
+pip install -e .
+
+# Install with dev dependencies for development
+uv sync --extra dev
 ```
 
-### Running with Docker
+### Running Locally with uv
+
+```bash
+# Set your data location
+export FOCUS_DATA_LOCATION="data/focus-export"
+
+# Run the server
+uv run python focus_mcp_server.py
+```
+
+### Configure Claude Desktop with Local Installation
+
+Add to your Claude Desktop `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/path/to/focus-mcp",
+        "python",
+        "focus_mcp_server.py"
+      ],
+      "env": {
+        "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
+        "FOCUS_VERSION": "1.0"
+      }
+    }
+  }
+}
+```
+
+### Building Your Own Docker Image
+
+```bash
+# Build the image
+docker build -t focus-mcp:custom .
+
+# Run your custom image
+docker run -i --rm \
+  -v "/path/to/your/focus/data:/data:ro" \
+  -e FOCUS_DATA_LOCATION=/data \
+  focus-mcp:custom
+```
+
+### Running Docker Directly (for testing)
 
 #### Local FOCUS Data
 
 ```bash
-# Run with local data mounted
 docker run -i --rm \
   -v "/path/to/your/focus/data:/data:ro" \
   -e FOCUS_DATA_LOCATION=/data \
@@ -263,7 +364,7 @@ docker run -i --rm \
   ghcr.io/glassity/focus-mcp:latest
 ```
 
-**Using AWS profile (recommended for multiple profiles):**
+**Using AWS profile:**
 
 ```bash
 docker run -i --rm \
@@ -272,104 +373,6 @@ docker run -i --rm \
   -e AWS_REGION="us-west-2" \
   -e AWS_PROFILE="billing-reader" \
   ghcr.io/glassity/focus-mcp:latest
-```
-
-### Using with Claude Desktop
-
-Configure Claude Desktop to use the Docker image in `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "/path/to/your/focus/data:/data:ro",
-        "-e",
-        "FOCUS_DATA_LOCATION=/data",
-        "-e",
-        "FOCUS_VERSION=1.0",
-        "ghcr.io/glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-**For S3 data with environment variables:**
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
-        "-e", "AWS_REGION=us-west-2",
-        "-e", "AWS_ACCESS_KEY_ID=your-access-key",
-        "-e", "AWS_SECRET_ACCESS_KEY=your-secret-key",
-        "ghcr.io/glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-**For S3 data with AWS profile:**
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v", "/Users/YOUR_USERNAME/.aws:/home/mcp/.aws:ro",
-        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
-        "-e", "AWS_REGION=us-west-2",
-        "-e", "AWS_PROFILE=billing-reader",
-        "ghcr.io/glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-### Building Your Own Image
-
-```bash
-# Clone the repository
-git clone https://github.com/glassity/focus-mcp.git
-cd focus-mcp
-
-# Build the image
-docker build -t focus-mcp:custom .
-
-# Run your custom image
-docker run -i --rm \
-  -v "/path/to/your/focus/data:/data:ro" \
-  -e FOCUS_DATA_LOCATION=/data \
-  focus-mcp:custom
-```
-
-## Development
-
-```bash
-# Install with dev dependencies
-uv sync --extra dev
-
-# Run locally
-export FOCUS_DATA_LOCATION="data/focus-export"
-uv run python focus_mcp_server.py
 ```
 
 ## Todo
