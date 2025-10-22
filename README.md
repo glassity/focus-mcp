@@ -120,16 +120,19 @@ export AWS_PROFILE="billing-reader"
 
 ### 2. Install & Configure with Docker (Recommended)
 
-The server is available as a Docker image on GitHub Container Registry.
+The server is available as a Docker image on both Docker Hub and GitHub Container Registry.
 
 #### Pull the Docker Image
 
 ```bash
-# Pull the latest image
+# From Docker Hub (recommended)
+docker pull glassity/focus-mcp:latest
+
+# Or from GitHub Container Registry
 docker pull ghcr.io/glassity/focus-mcp:latest
 
 # Or use a specific version
-docker pull ghcr.io/glassity/focus-mcp:v0.1.1
+docker pull glassity/focus-mcp:v0.1.1
 ```
 
 #### Configure Claude Desktop
@@ -153,7 +156,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
         "FOCUS_DATA_LOCATION=/data",
         "-e",
         "FOCUS_VERSION=1.0",
-        "ghcr.io/glassity/focus-mcp:latest"
+        "glassity/focus-mcp:latest"
       ]
     }
   }
@@ -175,7 +178,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
         "-e", "AWS_REGION=us-west-2",
         "-e", "AWS_ACCESS_KEY_ID=your-access-key",
         "-e", "AWS_SECRET_ACCESS_KEY=your-secret-key",
-        "ghcr.io/glassity/focus-mcp:latest"
+        "glassity/focus-mcp:latest"
       ]
     }
   }
@@ -197,7 +200,7 @@ Add to your Claude Desktop `claude_desktop_config.json`:
         "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
         "-e", "AWS_REGION=us-west-2",
         "-e", "AWS_PROFILE=billing-reader",
-        "ghcr.io/glassity/focus-mcp:latest"
+        "glassity/focus-mcp:latest"
       ]
     }
   }
@@ -358,7 +361,7 @@ docker run -i --rm \
   -v "/path/to/your/focus/data:/data:ro" \
   -e FOCUS_DATA_LOCATION=/data \
   -e FOCUS_VERSION=1.0 \
-  ghcr.io/glassity/focus-mcp:latest
+  glassity/focus-mcp:latest
 ```
 
 #### S3 FOCUS Data
@@ -371,7 +374,7 @@ docker run -i --rm \
   -e AWS_REGION="us-west-2" \
   -e AWS_ACCESS_KEY_ID="your-access-key" \
   -e AWS_SECRET_ACCESS_KEY="your-secret-key" \
-  ghcr.io/glassity/focus-mcp:latest
+  glassity/focus-mcp:latest
 ```
 
 **Using AWS profile:**
@@ -382,7 +385,7 @@ docker run -i --rm \
   -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
   -e AWS_REGION="us-west-2" \
   -e AWS_PROFILE="billing-reader" \
-  ghcr.io/glassity/focus-mcp:latest
+  glassity/focus-mcp:latest
 ```
 
 ## Todo

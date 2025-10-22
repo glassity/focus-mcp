@@ -12,8 +12,9 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  GHCR_REGISTRY: ghcr.io
+  GHCR_IMAGE_NAME: ${{ github.repository }}
+  DOCKERHUB_IMAGE_NAME: glassity/focus-mcp
 
 jobs:
   build-and-push:
@@ -35,15 +36,24 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ env.GHCR_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: |
+            ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}
+            ${{ env.DOCKERHUB_IMAGE_NAME }}
           tags: |
             # Set latest tag for main branch
             type=raw,value=latest,enable={{is_default_branch}}
@@ -76,18 +86,20 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
       - name: Output image details
         if: github.event_name != 'pull_request'
         run: |
-          echo "Image published:"
-          echo "Registry: ${{ env.REGISTRY }}"
-          echo "Repository: ${{ env.IMAGE_NAME }}"
-          echo "Tags:"
-          echo "${{ steps.meta.outputs.tags }}"
+          echo "Images published to multiple registries:"
           echo ""
-          echo "Pull with:"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          echo "GitHub Container Registry:"
+          echo "  docker pull ${{ env.GHCR_REGISTRY }}/${{ env.GHCR_IMAGE_NAME }}:latest"
+          echo ""
+          echo "Docker Hub:"
+          echo "  docker pull ${{ env.DOCKERHUB_IMAGE_NAME }}:latest"
+          echo ""
+          echo "All tags:"
+          echo "${{ steps.meta.outputs.tags }}"
