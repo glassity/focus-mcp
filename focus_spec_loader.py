@@ -241,7 +241,7 @@ def main():
     # Find specific column
     billed_cost = loader.find_column("BilledCost")
     if billed_cost:
-        print(f"\nBilledCost details:")
+        print("\nBilledCost details:")
         print(f"  Type: {billed_cost.get('column_type')}")
         print(f"  Feature: {billed_cost.get('feature_level')}")
         print(f"  Introduced: {billed_cost.get('introduced_version')}")
@@ -255,7 +255,7 @@ def main():
     # Find specific attribute
     unit_format = loader.find_attribute("unit_format")
     if unit_format:
-        print(f"\nUnit Format attribute:")
+        print("\nUnit Format attribute:")
         print(f"  Name: {unit_format.get('name')}")
         print(f"  Introduced: {unit_format.get('introduced_version')}")
 
