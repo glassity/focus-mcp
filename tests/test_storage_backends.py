@@ -13,7 +13,7 @@ import types
 import duckdb
 import pytest
 
-from storage_backends import (
+from focus_mcp.storage_backends import (
     GCSBackend,
     LocalBackend,
     S3Backend,

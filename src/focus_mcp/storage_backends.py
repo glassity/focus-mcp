@@ -17,7 +17,7 @@ from typing import Optional
 
 import duckdb
 
-import focus_config
+from . import config
 
 
 class StorageBackend(ABC):
@@ -78,7 +78,7 @@ class S3Backend(StorageBackend):
                 PROVIDER credential_chain,
                 REGION ?
             )
-        """, [focus_config.AWS_REGION])
+        """, [config.AWS_REGION])
         return None
 
 

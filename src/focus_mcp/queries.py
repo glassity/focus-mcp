@@ -20,7 +20,7 @@ import yaml
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
-import focus_config
+from . import config
 
 
 @dataclass
@@ -109,7 +109,7 @@ class QueryLoader:
                 self.adjustments = {}
 
         # Normalize the configured version (e.g., "1.0" -> "v1.0")
-        configured_version = f"v{focus_config.FOCUS_VERSION}"
+        configured_version = f"v{config.FOCUS_VERSION}"
 
         # Process each query
         for key, query_data in all_queries.items():
@@ -139,7 +139,7 @@ class QueryLoader:
             # Index by slug (key)
             self.queries[key] = query
 
-        print(f"Loaded {len(self.queries)} queries for FOCUS {focus_config.FOCUS_VERSION}")
+        print(f"Loaded {len(self.queries)} queries for FOCUS {config.FOCUS_VERSION}")
 
     def get_query(self, query_identifier: str) -> Optional[Query]:
         """
