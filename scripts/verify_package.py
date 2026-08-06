@@ -115,6 +115,101 @@ async def handshake(script: Path, cwd: Path) -> None:
             print(f"list_columns OK, {total} columns from a foreign working directory")
 
 
+def check_stdout_purity(script: Path, cwd: Path) -> None:
+    """Prove the console script never writes anything but JSON-RPC to stdout.
+
+    The handshake() check above goes through the Python `mcp` client, which
+    silently skips any line it cannot parse as JSON-RPC. That leniency is a
+    property of that one client, not of the protocol, so handshake() would
+    stay green even if a print() statement snuck a human-readable line into
+    stdout. This check bypasses the client and inspects the raw byte stream
+    instead.
+
+    It drives the same minimal exchange by hand - initialize, then the
+    notifications/initialized notification, then a tools/call for
+    list_columns - and reads stdout in full once the process exits. The
+    list_columns call matters here specifically because it is what triggers
+    the lazy get_spec_loader() path inside the server: a check that only
+    covered startup would miss a print() reintroduced mid-session, which is
+    the more dangerous case since it can desynchronise an already-running
+    client.
+
+    PYTHONUNBUFFERED=1 is set for the child on purpose: a stray print() left
+    on stdout sits in Python's block-buffered stdout until enough output
+    accumulates or the interpreter flushes it, and this process does not
+    reliably flush its default stdout on exit (it is double-wrapped by the
+    stdio transport's own TextIOWrapper around the same fd, and only that
+    wrapper gets flushed). Confirmed empirically: without this flag a single
+    reverted print() vanished without a trace on both streams, which would
+    have made this check pass over the exact regression it exists to catch.
+    """
+    env = dict(os.environ)
+    env["FOCUS_DATA_LOCATION"] = str(cwd / "no-such-data")
+    env["PYTHONUNBUFFERED"] = "1"
+
+    request_messages = [
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "verify-package-stdout-purity", "version": "0.0.0"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "list_columns", "arguments": {}},
+        },
+    ]
+    stdin_text = "".join(json.dumps(message) + "\n" for message in request_messages)
+
+    proc = subprocess.Popen(
+        [str(script)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(cwd),
+        env=env,
+    )
+    try:
+        stdout, stderr = proc.communicate(input=stdin_text, timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+        raise SystemExit(
+            f"raw MCP exchange timed out waiting for the server to exit; stderr:\n{stderr}"
+        )
+
+    lines = [line for line in stdout.splitlines() if line.strip()]
+
+    saw_list_columns_result = False
+    for line in lines:
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise SystemExit(
+                f"stdout is not pure JSON-RPC, found a non-JSON line: {line!r} ({e})\n"
+                f"full stdout was:\n{stdout}\nstderr was:\n{stderr}"
+            )
+        if parsed.get("id") == 2 and "result" in parsed:
+            saw_list_columns_result = True
+
+    if not saw_list_columns_result:
+        raise SystemExit(
+            "raw MCP exchange never produced a list_columns result, so this check "
+            f"did not exercise the mid-session get_spec_loader() path; "
+            f"exit code {proc.returncode}, stdout:\n{stdout}\nstderr:\n{stderr}"
+        )
+
+    print(f"stdout purity OK, {len(lines)} line(s) all parsed as JSON-RPC")
+
+
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: verify_package.py <wheel-or-sdist>")
@@ -137,6 +232,7 @@ def main() -> None:
         workdir = tmpdir / "workdir"
         workdir.mkdir()
         asyncio.run(handshake(script, workdir))
+        check_stdout_purity(script, workdir)
 
     print(f"{kind} verification passed")
 

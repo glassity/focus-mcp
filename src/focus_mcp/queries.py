@@ -16,6 +16,7 @@ The query library provides:
 - Source attribution for all queries
 """
 
+import sys
 import yaml
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
@@ -86,15 +87,15 @@ class QueryLoader:
         adjustments_file = resource_path("queries", "focus_use_cases_adjustments.yaml")
 
         if not yaml_file.exists():
-            print(f"Warning: Query file {yaml_file} does not exist")
-            print("Run 'python scrape_to_yaml.py' to generate it")
+            print(f"Warning: Query file {yaml_file} does not exist", file=sys.stderr)
+            print("Run 'python scrape_to_yaml.py' to generate it", file=sys.stderr)
             return
 
         try:
             with open(yaml_file, 'r', encoding='utf-8') as f:
                 all_queries = yaml.safe_load(f)
         except Exception as e:
-            print(f"Error loading queries from {yaml_file}: {e}")
+            print(f"Error loading queries from {yaml_file}: {e}", file=sys.stderr)
             return
 
         # Load adjustments if file exists
@@ -102,9 +103,9 @@ class QueryLoader:
             try:
                 with open(adjustments_file, 'r', encoding='utf-8') as f:
                     self.adjustments = yaml.safe_load(f) or {}
-                print(f"Loaded {len(self.adjustments)} query adjustments")
+                print(f"Loaded {len(self.adjustments)} query adjustments", file=sys.stderr)
             except Exception as e:
-                print(f"Error loading adjustments from {adjustments_file}: {e}")
+                print(f"Error loading adjustments from {adjustments_file}: {e}", file=sys.stderr)
                 self.adjustments = {}
 
         # Normalize the configured version (e.g., "1.0" -> "v1.0")
@@ -138,7 +139,7 @@ class QueryLoader:
             # Index by slug (key)
             self.queries[key] = query
 
-        print(f"Loaded {len(self.queries)} queries for FOCUS {config.FOCUS_VERSION}")
+        print(f"Loaded {len(self.queries)} queries for FOCUS {config.FOCUS_VERSION}", file=sys.stderr)
 
     def get_query(self, query_identifier: str) -> Optional[Query]:
         """
