@@ -144,12 +144,9 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
     1. The storage backend matching the configured data location (local,
        s3://, or gs:// — see storage_backends.py), which loads whatever
        extensions and credentials it needs
-    2. A 'focus_data_table' view that automatically discovers all Parquet
-       files in the configured data location using Hive partitioning
-
-    The Hive partitioning feature allows DuckDB to automatically understand
-    directory structures like 'year=2024/month=01/' commonly used in cloud
-    data exports, making queries more efficient by enabling partition pruning.
+    2. A 'focus_data_table' view over the Parquet files at that location,
+       sourced from the export's own manifests when it has them and from
+       a recursive glob otherwise (see data_loading.py)
 
     Returns:
         DuckDB connection with FOCUS data view ready for querying
@@ -166,6 +163,7 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
         # Resolve the backend for the configured location and prepare the
         # connection (extensions + credentials). prepare() returns an
         # error hint to surface if reads fail later.
+        from data_loading import create_focus_view
         from storage_backends import resolve_backend
 
         backend = resolve_backend(DATA_LOCATION)
@@ -174,16 +172,9 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
         clean_location = location.rstrip('/')
         hint = backend.prepare(db_connection, clean_location)
 
-        # Create a view that aggregates all FOCUS Parquet files
-        # The '**/*.parquet' pattern recursively finds all parquet files
-        # hive_partitioning=true enables automatic partition column inference
         if backend.exists(location):
-            view_query = f"""
-                CREATE OR REPLACE VIEW focus_data_table AS
-                SELECT * FROM read_parquet('{clean_location}/**/*.parquet', hive_partitioning=true)
-            """
             try:
-                db_connection.execute(view_query)
+                create_focus_view(db_connection, clean_location)
             except Exception as e:
                 if hint:
                     raise RuntimeError(hint) from e

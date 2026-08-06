@@ -181,6 +181,14 @@ export FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports"
 export AWS_REGION="us-west-2"        # defaults to us-east-1
 ```
 
+Point the location at the export root, the prefix holding both `data/` and
+`metadata/`. AWS Data Exports list every file of their latest delivery in a
+per-billing-period manifest under `metadata/`, and the server loads those
+files when the manifests are there: superseded chunks and re-delivered
+periods left behind on the prefix are ignored instead of double-counted.
+Locations without manifests — a BigQuery export, a directory of Parquet
+files — are read by globbing every Parquet file underneath them.
+
 Authentication uses the standard AWS credential chain, in order: IAM role
 (automatic on EC2/ECS/Lambda), `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`
 environment variables, `AWS_PROFILE`, then `~/.aws/credentials`.
