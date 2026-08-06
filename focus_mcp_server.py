@@ -19,14 +19,20 @@ Architecture:
 - Handles FOCUS billing data standards and conventions
 """
 
+import logging
+import time
 from typing import Any, Optional
 from pydantic import Field
 import duckdb
 from mcp.server.fastmcp import FastMCP
 
 import focus_config
+from data_loading import create_focus_view
 from focus_queries import focus_queries
 from focus_spec_loader import FocusSpecLoader
+from storage_backends import resolve_backend
+
+logger = logging.getLogger(__name__)
 
 # Initialize MCP server with FOCUS-specific instructions
 # FastMCP provides a simplified interface for creating MCP servers
@@ -130,6 +136,14 @@ DATA_LOCATION = focus_config.DATA_LOCATION
 # DuckDB connections are thread-safe and expensive to create, so we reuse one instance
 db_connection: Optional[duckdb.DuckDBPyConnection] = None
 
+# How focus_data_table was built, and when. The manifest strategy pins the
+# file list of one delivery, so a server that stays up for days (stdio MCP
+# servers do) has to rebuild the view to see the deliveries after it.
+VIEW_MAX_AGE_SECONDS = 300
+loading_strategy: Optional[str] = None
+view_location: Optional[str] = None
+view_built_at: float = 0.0
+
 # Global specification loader - Singleton for cached spec data
 spec_loader: Optional[FocusSpecLoader] = None
 
@@ -146,7 +160,8 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
        extensions and credentials it needs
     2. A 'focus_data_table' view over the Parquet files at that location,
        sourced from the export's own manifests when it has them and from
-       a recursive glob otherwise (see data_loading.py)
+       a recursive glob otherwise (see data_loading.py), rebuilt once the
+       view is older than VIEW_MAX_AGE_SECONDS so later deliveries show up
 
     Returns:
         DuckDB connection with FOCUS data view ready for querying
@@ -154,33 +169,65 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
     Raises:
         Exception: If DuckDB fails to initialize or load the data
     """
-    global db_connection
+    global db_connection, loading_strategy, view_location, view_built_at
 
     if db_connection is None:
         # Create new DuckDB connection (in-memory database)
-        db_connection = duckdb.connect()
+        conn = duckdb.connect()
 
         # Resolve the backend for the configured location and prepare the
         # connection (extensions + credentials). prepare() returns an
         # error hint to surface if reads fail later.
-        from data_loading import create_focus_view
-        from storage_backends import resolve_backend
-
         backend = resolve_backend(DATA_LOCATION)
         location = backend.normalize(DATA_LOCATION)
         # Clean up the path - ensure no trailing slash for consistency
         clean_location = location.rstrip('/')
-        hint = backend.prepare(db_connection, clean_location)
+        hint = backend.prepare(conn, clean_location)
 
+        strategy = None
         if backend.exists(location):
             try:
-                create_focus_view(db_connection, clean_location)
+                strategy = create_focus_view(conn, clean_location)
             except Exception as e:
+                # Nothing is cached on failure, so the next call retries
+                # and raises this error again instead of handing out a
+                # viewless connection that fails with a catalog error.
+                conn.close()
                 if hint:
                     raise RuntimeError(hint) from e
                 raise
 
+        db_connection = conn
+        loading_strategy = strategy
+        view_location = clean_location
+        view_built_at = time.monotonic()
+    elif loading_strategy and (
+        time.monotonic() - view_built_at > VIEW_MAX_AGE_SECONDS
+    ):
+        refresh_focus_view()
+
     return db_connection
+
+
+def refresh_focus_view() -> None:
+    """
+    Rebuild focus_data_table so later deliveries are picked up.
+
+    A failed refresh keeps the working view in place and is retried after
+    the next interval: a transient listing failure must not take down a
+    server that is serving data fine.
+    """
+    global loading_strategy, view_built_at
+
+    view_built_at = time.monotonic()
+    try:
+        loading_strategy = create_focus_view(db_connection, view_location)
+    except Exception as e:
+        logger.warning(
+            "Keeping the loaded data: reloading it from %s failed: %s",
+            view_location,
+            e,
+        )
 
 
 def get_spec_loader() -> FocusSpecLoader:
@@ -279,6 +326,11 @@ async def get_data_info() -> dict[str, Any]:
         return {
             "result": {
                 "data_location": DATA_LOCATION,
+                # How the files were picked: "manifest" reads an AWS
+                # export's own delivery manifests, the "glob" strategies
+                # read every Parquet file under the location and can
+                # double-count an export left behind on the prefix.
+                "loading_strategy": loading_strategy,
                 "row_count": summary[0],
                 "date_range": {
                     "start": str(summary[1]) if summary[1] else None,

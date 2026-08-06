@@ -174,6 +174,10 @@ selects which set is active.
 export FOCUS_DATA_LOCATION="/path/to/your/focus/data"
 ```
 
+A downloaded copy of an AWS Data Export (`aws s3 sync`, a mounted volume)
+is loaded through the manifests it was copied with, exactly as the bucket
+itself would be — see below.
+
 ### Amazon S3
 
 ```bash
@@ -188,6 +192,8 @@ files when the manifests are there: superseded chunks and re-delivered
 periods left behind on the prefix are ignored instead of double-counted.
 Locations without manifests — a BigQuery export, a directory of Parquet
 files — are read by globbing every Parquet file underneath them.
+`get_data_info` reports which of the two was used, and the file list is
+refreshed every few minutes so new deliveries need no restart.
 
 Authentication uses the standard AWS credential chain, in order: IAM role
 (automatic on EC2/ECS/Lambda), `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`

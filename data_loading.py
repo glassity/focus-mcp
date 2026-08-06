@@ -16,7 +16,9 @@ Two strategies, picked at view-creation time:
    the manifests needs no special-casing of any of them.
 2. Glob fallback, for everything else - bundled sample data, BigQuery
    FOCUS exports written to GCS, arbitrary directories - which has no
-   metadata/ prefix.
+   metadata/ prefix. An export whose manifests cannot be read is an
+   error rather than a reason to glob it: the manifests are proof that
+   globbing would double-count.
 
 Both strategies run over the connection the storage backend prepared, so
 they behave the same on local paths, s3:// and gs://.
@@ -41,6 +43,14 @@ BILLING_PERIOD_EXPR = (
     r"regexp_extract(filename, '(?i)billing_period=(\d{4}-\d{2})', 1)"
 )
 
+# dataFiles holds the URIs of the bucket the export was delivered to. A
+# copy of that export (aws s3 sync into a directory, a mirror in another
+# bucket) keeps AWS's data/<PARTITION>/[<execution>/]<file> layout but not
+# those URIs, so only the layout tail is trusted.
+DATA_FILE_TAIL_PATTERN = re.compile(
+    r"(?:^|/)(data/billing_period=\d{4}-\d{2}/.+)$", re.IGNORECASE
+)
+
 
 def _sql_literal(value: str) -> str:
     """Quote a string for inlining: views cannot carry bound parameters."""
@@ -59,15 +69,15 @@ def _is_partition_manifest(path: str) -> bool:
 def discover_manifests(
     conn: duckdb.DuckDBPyConnection, location: str
 ) -> list[str]:
-    """Return the partition-level export manifests under the location."""
+    """Return the partition-level export manifests under the location.
+
+    A location that is not an export simply globs to nothing. An error
+    means the metadata/ prefix could not be listed, which must not be
+    read as "no manifests here": that silently downgrades an export to
+    the glob, so it propagates instead.
+    """
     pattern = MANIFEST_GLOB.format(location=location)
-    try:
-        rows = conn.execute("SELECT file FROM glob(?)", [pattern]).fetchall()
-    except duckdb.Error as e:
-        # Unreadable location: leave it to the glob fallback, which fails
-        # with the backend's credential hint attached.
-        logger.debug("Manifest discovery failed for %s: %s", pattern, e)
-        return []
+    rows = conn.execute("SELECT file FROM glob(?)", [pattern]).fetchall()
     return sorted(p for (p,) in rows if _is_partition_manifest(p))
 
 
@@ -91,13 +101,30 @@ def read_manifest_data_files(
     ]
 
 
+def rebase_data_file(location: str, uri: str) -> str:
+    """Point a dataFiles URI at the location the export is read from.
+
+    Reading the export where it was delivered rebases it onto itself; a
+    copy of it is read from the copy instead of from the original bucket.
+    """
+    match = DATA_FILE_TAIL_PATTERN.search(uri)
+    if not match:
+        # Layout AWS does not write: the manifest's own URI is all we have
+        logger.warning("Unexpected data file path in manifest: %s", uri)
+        return uri
+    return f"{location}/{match.group(1)}"
+
+
 def collect_data_files(
-    conn: duckdb.DuckDBPyConnection, manifests: list[str]
+    conn: duckdb.DuckDBPyConnection, manifests: list[str], location: str
 ) -> list[str]:
     """Union the manifests' dataFiles, deduped, in discovery order."""
     files: list[str] = []
     for manifest in manifests:
-        files.extend(read_manifest_data_files(conn, manifest))
+        files.extend(
+            rebase_data_file(location, uri)
+            for uri in read_manifest_data_files(conn, manifest)
+        )
     return list(dict.fromkeys(files))
 
 
@@ -122,52 +149,90 @@ def manifest_view_sql(data_files: list[str]) -> str:
 
 
 def glob_view_sql(location: str, hive_partitioning: bool) -> str:
-    """View over every Parquet file under the location."""
+    """View over every Parquet file under the location.
+
+    union_by_name absorbs schema drift between billing periods here for
+    the same reason it does in manifest_view_sql.
+    """
     pattern = _sql_literal(f"{location}/**/*.parquet")
     if hive_partitioning:
         return f"""
             CREATE OR REPLACE VIEW focus_data_table AS
-            SELECT * FROM read_parquet({pattern}, hive_partitioning=true)
+            SELECT * FROM read_parquet(
+                {pattern}, union_by_name=true, hive_partitioning=true
+            )
         """
     # Retry path: inference is off, so billing_period is derived from the
     # path instead of being dropped from the view.
     return f"""
         CREATE OR REPLACE VIEW focus_data_table AS
         SELECT * EXCLUDE (filename), {BILLING_PERIOD_EXPR} AS billing_period
-        FROM read_parquet({pattern}, hive_partitioning=false, filename=true)
+        FROM read_parquet(
+            {pattern},
+            union_by_name=true,
+            hive_partitioning=false,
+            filename=true
+        )
     """
 
 
-def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
-    """Create the focus_data_table view over the data at the location.
+def _is_readable(conn: duckdb.DuckDBPyConnection, path: str) -> bool:
+    """Whether DuckDB can still see a file a manifest points at."""
+    try:
+        return bool(
+            conn.execute("SELECT count(*) FROM glob(?)", [path]).fetchone()[0]
+        )
+    except duckdb.Error:
+        return False
 
-    Returns the name of the strategy used. DuckDB errors propagate: the
-    caller decides whether to attach a backend hint to them.
-    """
-    manifests = discover_manifests(conn, location)
-    if manifests:
-        data_files = collect_data_files(conn, manifests)
-        if data_files:
-            logger.info(
-                "Loading FOCUS data from %d export manifest(s): %d file(s)",
-                len(manifests),
-                len(data_files),
-            )
-            conn.execute(manifest_view_sql(data_files))
-            return "manifest"
+
+def _create_manifest_view(
+    conn: duckdb.DuckDBPyConnection, location: str, manifests: list[str]
+) -> str:
+    """Create the view from the export's own manifests."""
+    data_files = collect_data_files(conn, manifests, location)
+    if not data_files:
+        # The manifests are proof this is an export, and globbing an
+        # export double-counts it, so there is nothing to fall back to.
+        raise RuntimeError(
+            f"Found {len(manifests)} export manifest(s) under {location} but "
+            "no data file in any of them; the export cannot be loaded "
+            "without readable manifests"
+        )
+    logger.info(
+        "Loading FOCUS data from %d export manifest(s): %d file(s)",
+        len(manifests),
+        len(data_files),
+    )
+    try:
+        conn.execute(manifest_view_sql(data_files))
+    except duckdb.IOException as e:
+        # A manifest outlives its data when a period is expired or cleaned
+        # up by hand. Serve the periods that are left rather than nothing.
+        present = [f for f in data_files if _is_readable(conn, f)]
+        if not present or len(present) == len(data_files):
+            raise
         logger.warning(
-            "Found %d export manifest(s) under %s but no data files in them; "
-            "loading every Parquet file under the location instead",
-            len(manifests),
+            "%d of %d manifested file(s) under %s cannot be read (%s); "
+            "loading the other %d",
+            len(data_files) - len(present),
+            len(data_files),
             location,
+            e,
+            len(present),
         )
-    else:
-        logger.info(
-            "No export manifests under %s; loading every Parquet file "
-            "under the location",
-            location,
-        )
+        conn.execute(manifest_view_sql(present))
+        return "manifest-partial"
+    return "manifest"
 
+
+def _create_glob_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
+    """Create the view from every Parquet file under the location."""
+    logger.info(
+        "No export manifests under %s; loading every Parquet file "
+        "under the location",
+        location,
+    )
     try:
         conn.execute(glob_view_sql(location, hive_partitioning=True))
     except duckdb.BinderException as e:
@@ -183,3 +248,19 @@ def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
         conn.execute(glob_view_sql(location, hive_partitioning=False))
         return "glob-no-hive"
     return "glob"
+
+
+def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
+    """Create the focus_data_table view over the data at the location.
+
+    Returns the name of the strategy used, which callers surface: a glob
+    over what turns out to be an export is the failure mode this module
+    exists to avoid, and it is invisible otherwise.
+
+    Errors propagate: the caller decides whether to attach a backend hint
+    to them.
+    """
+    manifests = discover_manifests(conn, location)
+    if manifests:
+        return _create_manifest_view(conn, location, manifests)
+    return _create_glob_view(conn, location)
