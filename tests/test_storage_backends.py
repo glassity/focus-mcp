@@ -159,7 +159,10 @@ def test_gcs_keyless_tier_returns_hint(conn, monkeypatch):
     monkeypatch.setitem(sys.modules, "gcsfs", None)
     hint = GCSBackend().prepare(conn, "gs://bucket/path")
     assert hint is not None
-    assert "GCS_HMAC_KEY_ID" in hint
-    assert "focus-mcp[gcs]" in hint
-    assert "gs://bucket/path" in hint
+    assert hint == (
+        "Failed to read gs://bucket/path without GCS credentials. "
+        "Set GCS_HMAC_KEY_ID and GCS_HMAC_SECRET, or install "
+        "the gcs extra (pip install 'focus-mcp[gcs]') to use "
+        "Application Default Credentials."
+    )
     assert "httpfs" in loaded_extensions(conn)

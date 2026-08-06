@@ -19,7 +19,6 @@ Architecture:
 - Handles FOCUS billing data standards and conventions
 """
 
-import os
 from typing import Any, Optional
 from pydantic import Field
 import duckdb
