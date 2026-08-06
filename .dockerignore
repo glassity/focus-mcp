@@ -39,6 +39,10 @@ env/
 *.swo
 *~
 .DS_Store
+.claude/
+.superpowers/
+.mypy_cache/
+.ruff_cache/
 
 # Testing and coverage
 .pytest_cache/
