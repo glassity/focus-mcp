@@ -9,18 +9,21 @@ import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from packaging.version import parse
+from .paths import resource_path
 
 
 class FocusSpecLoader:
     """Loader for FOCUS specification data from YAML files."""
 
-    def __init__(self, spec_dir: str = "resources/specifications"):
+    def __init__(self, spec_dir: str | None = None):
         """Initialize loader and load specification data.
 
         Args:
-            spec_dir: Directory containing columns.yaml and attributes.yaml
+            spec_dir: Directory containing columns.yaml and attributes.yaml.
+                Defaults to the specifications that ship inside the package.
+                Tests and the scripts/ extractors pass a checkout directory.
         """
-        spec_path = Path(spec_dir)
+        spec_path = Path(spec_dir) if spec_dir is not None else resource_path("specifications")
 
         # Load data files with graceful degradation
         columns_file = spec_path / "columns.yaml"

@@ -17,10 +17,10 @@ The query library provides:
 """
 
 import yaml
-from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from . import config
+from .paths import resource_path
 
 
 @dataclass
@@ -81,10 +81,9 @@ class QueryLoader:
         This approach provides version-specific query sets while maintaining
         all metadata from the focus.finops.org website.
         """
-        # Find the YAML files in resources/queries
-        package_dir = Path(__file__).parent
-        yaml_file = package_dir / "resources" / "queries" / "focus_use_cases.yaml"
-        adjustments_file = package_dir / "resources" / "queries" / "focus_use_cases_adjustments.yaml"
+        # Find the YAML files that ship inside the package
+        yaml_file = resource_path("queries", "focus_use_cases.yaml")
+        adjustments_file = resource_path("queries", "focus_use_cases_adjustments.yaml")
 
         if not yaml_file.exists():
             print(f"Warning: Query file {yaml_file} does not exist")
