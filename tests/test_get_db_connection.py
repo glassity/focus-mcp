@@ -58,6 +58,10 @@ def test_local_happy_path(tmp_path, monkeypatch):
     assert "billing_period" in cols
 
 
+@pytest.mark.skipif(
+    not BUNDLED_SAMPLE.exists(),
+    reason="sample export is untracked; present only in local checkouts",
+)
 def test_bundled_sample_data_loads(monkeypatch):
     # No metadata/ prefix ships with the sample, so this is the glob path
     monkeypatch.setattr(
