@@ -19,7 +19,6 @@ Architecture:
 - Handles FOCUS billing data standards and conventions
 """
 
-import os
 from typing import Any, Optional
 from pydantic import Field
 import duckdb
@@ -142,11 +141,11 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
     This function implements a singleton pattern to ensure we only create one
     database connection per server instance. The connection is configured with:
 
-    1. Remote file access for S3 (httpfs extension) and GCS (httpfs or
-       a registered gcsfs filesystem, depending on available credentials)
-    2. Cloud credentials configuration when using S3 or GCS
-    3. A 'focus_data_table' view that automatically discovers all Parquet files
-       in the configured data location (local or S3) using Hive partitioning
+    1. The storage backend matching the configured data location (local,
+       s3://, or gs:// — see storage_backends.py), which loads whatever
+       extensions and credentials it needs
+    2. A 'focus_data_table' view that automatically discovers all Parquet
+       files in the configured data location using Hive partitioning
 
     The Hive partitioning feature allows DuckDB to automatically understand
     directory structures like 'year=2024/month=01/' commonly used in cloud
@@ -164,37 +163,21 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
         # Create new DuckDB connection (in-memory database)
         db_connection = duckdb.connect()
 
-        # Parse data location to determine source type
-        from data_source import parse_data_location
-        source_type, location = parse_data_location(DATA_LOCATION)
+        # Resolve the backend for the configured location and prepare the
+        # connection (extensions + credentials). prepare() returns an
+        # error hint to surface if reads fail later.
+        from storage_backends import resolve_backend
 
-        # Configure cloud credentials per source type.
-        # gcs_tier records how GCS access was established: "adc" means a
-        # gcsfs filesystem is registered on the connection and handles
-        # gs:// URLs itself, so httpfs must NOT be loaded (both claim the
-        # gs:// prefix and httpfs would intercept the reads).
-        gcs_tier = None
-        if source_type == "gcs":
-            from credentials import setup_gcs_credentials
-            gcs_tier = setup_gcs_credentials(db_connection)
-
-        if gcs_tier != "adc":
-            # Install and load httpfs for remote file access (S3, and
-            # GCS over its S3-interoperability API for hmac/none tiers)
-            db_connection.execute("INSTALL httpfs; LOAD httpfs;")
-
-        # Setup S3 credentials if needed
-        if source_type == "s3":
-            from credentials import setup_s3_credentials
-            setup_s3_credentials(db_connection, region=focus_config.AWS_REGION)
+        backend = resolve_backend(DATA_LOCATION)
+        location = backend.normalize(DATA_LOCATION)
+        # Clean up the path - ensure no trailing slash for consistency
+        clean_location = location.rstrip('/')
+        hint = backend.prepare(db_connection, clean_location)
 
         # Create a view that aggregates all FOCUS Parquet files
-        # Works for local paths, S3 URIs, and GCS URIs
         # The '**/*.parquet' pattern recursively finds all parquet files
         # hive_partitioning=true enables automatic partition column inference
-        if source_type in ("s3", "gcs") or os.path.exists(location):
-            # Clean up the path - ensure no trailing slash for consistency
-            clean_location = location.rstrip('/')
+        if backend.exists(location):
             view_query = f"""
                 CREATE OR REPLACE VIEW focus_data_table AS
                 SELECT * FROM read_parquet('{clean_location}/**/*.parquet', hive_partitioning=true)
@@ -202,13 +185,8 @@ def get_db_connection() -> duckdb.DuckDBPyConnection:
             try:
                 db_connection.execute(view_query)
             except Exception as e:
-                if source_type == "gcs" and gcs_tier == "none":
-                    raise RuntimeError(
-                        f"Failed to read {clean_location} without GCS credentials. "
-                        "Set GCS_HMAC_KEY_ID and GCS_HMAC_SECRET, or install "
-                        "the gcs extra (pip install 'focus-mcp[gcs]') to use "
-                        "Application Default Credentials."
-                    ) from e
+                if hint:
+                    raise RuntimeError(hint) from e
                 raise
 
     return db_connection

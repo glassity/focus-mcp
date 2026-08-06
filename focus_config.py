@@ -50,7 +50,7 @@ import os
 # - AWS CLI profiles (AWS_PROFILE)
 # - Instance metadata service
 #
-# For GCS, authentication is tiered (see credentials.py):
+# For GCS, authentication is tiered (see storage_backends.py):
 # - HMAC env vars (GCS_HMAC_KEY_ID, GCS_HMAC_SECRET) if set
 # - Application Default Credentials via gcsfs (gcs extra) otherwise
 # - Keyless access as last resort (public buckets only)
