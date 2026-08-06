@@ -20,8 +20,25 @@ import sys
 import yaml
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
+from packaging.version import parse
 from . import config
 from .paths import resource_path
+
+
+def version_satisfies(configured: str, supported: List[str]) -> bool:
+    """Whether a query tagged `supported` should load at `configured`.
+
+    A query loads for a version it lists, and for anything newer, since
+    the library is only tagged up to the release it was reviewed against.
+    Older versions are excluded: a query tagged only v1.2 uses columns
+    v1.0 does not have.
+    """
+    if not supported:
+        return False
+    if configured in supported:
+        return True
+    newest = max(parse(v.lstrip('v')) for v in supported)
+    return parse(configured.lstrip('v')) > newest
 
 
 @dataclass
@@ -123,7 +140,7 @@ class QueryLoader:
 
             # Filter by FOCUS version
             focus_versions = query_data.get('focus_versions', [])
-            if configured_version not in focus_versions:
+            if not version_satisfies(configured_version, focus_versions):
                 continue  # Skip queries not compatible with configured version
 
             # Create Query object with all metadata

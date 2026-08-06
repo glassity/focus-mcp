@@ -251,7 +251,8 @@ def test_manifest_view_hides_the_filename_column(conn, tmp_path):
     write_period(tmp_path, "billing_period=2026-04", [("AWS", 1.0)])
     create_focus_view(conn, str(tmp_path))
     cols = [r[0] for r in conn.execute("DESCRIBE focus_data_table").fetchall()]
-    assert cols == ["ProviderName", "BilledCost", "billing_period"]
+    assert "filename" not in cols
+    assert cols[:3] == ["ProviderName", "BilledCost", "billing_period"]
 
 
 def test_manifest_view_unions_differing_schemas(conn, tmp_path):
@@ -363,3 +364,68 @@ def test_hive_mismatch_retry_unions_differing_schemas(conn, tmp_path):
 def test_glob_failure_propagates(conn, tmp_path):
     with pytest.raises(duckdb.Error):
         create_focus_view(conn, str(tmp_path))
+
+
+# --- pre-1.3 column aliases ---
+
+def test_aliases_provider_name_for_pre_1_3_data(conn, tmp_path):
+    write_period(tmp_path, "billing_period=2026-04", [("AWS", 1.0)])
+    create_focus_view(conn, str(tmp_path))
+    assert conn.execute(
+        "SELECT ServiceProviderName FROM focus_data_table"
+    ).fetchall() == [("AWS",)]
+
+
+def test_does_not_alias_when_the_export_already_speaks_1_3(conn, tmp_path):
+    data_file = tmp_path / "data" / "billing_period=2026-04" / "part.parquet"
+    data_file.parent.mkdir(parents=True)
+    duckdb.connect().execute(
+        f"COPY (SELECT 'Snowflake' AS ServiceProviderName, 'AWS' AS ProviderName)"
+        f" TO '{data_file}' (FORMAT parquet)"
+    )
+    write_manifest(
+        tmp_path / "metadata" / "billing_period=2026-04"
+        / "focus-export-Manifest.json",
+        [data_file],
+    )
+    create_focus_view(conn, str(tmp_path))
+    # The real column wins; aliasing would have shadowed it with ProviderName.
+    assert conn.execute(
+        "SELECT ServiceProviderName FROM focus_data_table"
+    ).fetchall() == [("Snowflake",)]
+
+
+def test_no_alias_without_the_column_it_renames(conn, tmp_path):
+    data_file = tmp_path / "data" / "billing_period=2026-04" / "part.parquet"
+    data_file.parent.mkdir(parents=True)
+    duckdb.connect().execute(
+        f"COPY (SELECT 1.0 AS BilledCost) TO '{data_file}' (FORMAT parquet)"
+    )
+    write_manifest(
+        tmp_path / "metadata" / "billing_period=2026-04"
+        / "focus-export-Manifest.json",
+        [data_file],
+    )
+    create_focus_view(conn, str(tmp_path))
+    cols = [r[0] for r in conn.execute("DESCRIBE focus_data_table").fetchall()]
+    # No ProviderName to rename, so nothing is invented for it.
+    assert "ServiceProviderName" not in cols
+
+
+def test_aliases_service_provider_name_back_for_1_3_data(conn, tmp_path):
+    data_file = tmp_path / "data" / "billing_period=2026-04" / "part.parquet"
+    data_file.parent.mkdir(parents=True)
+    duckdb.connect().execute(
+        f"COPY (SELECT 'AWS' AS ServiceProviderName)"
+        f" TO '{data_file}' (FORMAT parquet)"
+    )
+    write_manifest(
+        tmp_path / "metadata" / "billing_period=2026-04"
+        / "focus-export-Manifest.json",
+        [data_file],
+    )
+    create_focus_view(conn, str(tmp_path))
+    # A 1.2-era query must still bind against an export that speaks 1.3.
+    assert conn.execute(
+        "SELECT ProviderName FROM focus_data_table"
+    ).fetchall() == [("AWS",)]

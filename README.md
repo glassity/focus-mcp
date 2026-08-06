@@ -298,7 +298,7 @@ inside the server process and are never exposed to MCP clients.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FOCUS_DATA_LOCATION` | `data/focus-export` | Where the Parquet lives: a local path, `s3://…`, or `gs://…` |
-| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, or `1.2` |
+| `FOCUS_VERSION` | `1.0` | FOCUS specification version. The query library is written against `1.0`, `1.1` and `1.2`; a newer version loads the queries that still apply |
 | `AWS_REGION` | `us-east-1` | Region for S3 access |
 | `AWS_PROFILE` | (unset) | AWS profile for S3 authentication |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | (unset) | Static AWS credentials, if not using a role or profile |
