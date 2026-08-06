@@ -10,6 +10,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout repository
@@ -18,11 +22,39 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+
+      - name: Verify the lock file matches pyproject.toml
+        run: uv lock --check
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync
 
       # First test run downloads DuckDB's httpfs extension (needs network)
       - name: Run tests
         run: uv run pytest -v
+
+  packaging:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build the wheel
+        run: uv build --wheel
+
+      - name: Verify the wheel installs and serves MCP
+        run: uv run python scripts/verify_package.py dist/*.whl
