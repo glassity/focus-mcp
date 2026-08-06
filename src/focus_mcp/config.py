@@ -11,9 +11,10 @@ scenarios (development, staging, production) without code changes.
 All settings have sensible defaults for quick local development.
 
 Environment Variables:
-    FOCUS_DATA_LOCATION: Path to FOCUS data (local or S3 URI)
+    FOCUS_DATA_LOCATION: Path to FOCUS data (local path, s3:// or gs:// URI)
                          Default: "data/focus-export"
-                         Examples: "/path/to/data" or "s3://bucket/path"
+                         Relative local paths are resolved against the working
+                         directory at startup and reported as absolute.
 
     AWS_REGION: AWS region for S3 access
                 Default: "us-east-1"
@@ -36,6 +37,7 @@ with relative paths resolved from the server's working directory.
 """
 
 import os
+from pathlib import Path
 
 # Data source configuration
 # Supports local paths, S3 locations, and GCS locations
@@ -54,7 +56,19 @@ import os
 # - HMAC env vars (GCS_HMAC_KEY_ID, GCS_HMAC_SECRET) if set
 # - Application Default Credentials via gcsfs (gcs extra) otherwise
 # - Keyless access as last resort (public buckets only)
-DATA_LOCATION = os.getenv("FOCUS_DATA_LOCATION", "data/focus-export")
+def _resolve_location(location: str) -> str:
+    """Make local paths absolute; leave remote URIs exactly as given.
+
+    A relative path resolved against an MCP client's working directory is not
+    something a user can debug from an error message. Remote URIs must survive
+    verbatim: Path() would collapse the double slash in "s3://bucket".
+    """
+    if "://" in location:
+        return location
+    return str(Path(location).expanduser().resolve())
+
+
+DATA_LOCATION = _resolve_location(os.getenv("FOCUS_DATA_LOCATION", "data/focus-export"))
 
 # AWS Configuration (optional)
 # Region for S3 access - defaults to us-east-1 if not specified

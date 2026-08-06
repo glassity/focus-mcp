@@ -294,7 +294,10 @@ async def get_data_info() -> dict[str, Any]:
             return {
                 "result": {
                     "status": "no_data",
-                    "message": "No FOCUS data loaded. Set FOCUS_DATA_LOCATION environment variable.",
+                    "message": (
+                        f"No FOCUS data found at {DATA_LOCATION}. Set FOCUS_DATA_LOCATION "
+                        "to the directory or bucket URI holding your FOCUS export."
+                    ),
                     "data_location": DATA_LOCATION,
                 }
             }
