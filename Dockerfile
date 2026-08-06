@@ -11,7 +11,7 @@ COPY pyproject.toml uv.lock ./
 
 # Install dependencies in a virtual environment
 # This creates a clean, isolated Python environment
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra gcs
 
 # Stage 2: Runtime environment
 # Use minimal Python image for runtime

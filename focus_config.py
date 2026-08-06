@@ -21,6 +21,13 @@ Environment Variables:
     AWS_PROFILE: Optional AWS profile for authentication
                  Uses credential chain if not specified
 
+    GCS_HMAC_KEY_ID: GCS HMAC access key for gs:// locations
+                     (create with: gcloud storage hmac create <service-account>)
+
+    GCS_HMAC_SECRET: GCS HMAC secret paired with GCS_HMAC_KEY_ID.
+                     If unset, Application Default Credentials are used
+                     when gcsfs is installed (gcs extra).
+
     FOCUS_VERSION: FOCUS specification version
                    Default: "1.0"
 
@@ -31,16 +38,22 @@ with relative paths resolved from the server's working directory.
 import os
 
 # Data source configuration
-# Supports both local paths and S3 locations
+# Supports local paths, S3 locations, and GCS locations
 # Examples:
 #   Local: "/path/to/focus/data" or "data/focus-export"
 #   S3: "s3://bucket-name/path/to/focus/data"
+#   GCS: "gs://bucket-name/path/to/focus/data"
 #
 # For S3, authentication is handled automatically via AWS credential chain:
 # - IAM roles (EC2, ECS, Lambda)
 # - Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 # - AWS CLI profiles (AWS_PROFILE)
 # - Instance metadata service
+#
+# For GCS, authentication is tiered (see credentials.py):
+# - HMAC env vars (GCS_HMAC_KEY_ID, GCS_HMAC_SECRET) if set
+# - Application Default Credentials via gcsfs (gcs extra) otherwise
+# - Keyless access as last resort (public buckets only)
 DATA_LOCATION = os.getenv("FOCUS_DATA_LOCATION", "data/focus-export")
 
 # AWS Configuration (optional)
