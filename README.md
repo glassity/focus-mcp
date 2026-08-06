@@ -1,121 +1,214 @@
-# FOCUS MCP Server
-
 <p align="center">
   <a href="https://glassity.cloud">
-    <img src=".github/banner.png" alt="Glassity - Cloud Cost Visibility and Optimization" width="400" />
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark-mode.svg">
+      <img src=".github/assets/logo-light-mode.svg" alt="Glassity" width="320">
+    </picture>
   </a>
-  <br />
-  <strong>Get comprehensive cloud cost visibility and optimization insights at <a href="https://glassity.cloud">glassity.cloud</a></strong>
 </p>
 
----
+<p align="center">
+  <a href="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml"><img src="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml/badge.svg" alt="Docker build"></a>
+  <a href="https://hub.docker.com/r/glassity/focus-mcp"><img src="https://img.shields.io/docker/pulls/glassity/focus-mcp?color=0EA0BE" alt="Docker pulls"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-1E1839" alt="License: Apache-2.0"></a>
+</p>
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![FOCUS v1.0](https://img.shields.io/badge/FOCUS%20v1.0-36%20queries-blue.svg)](https://focus.finops.org/)
-[![FOCUS v1.1](https://img.shields.io/badge/FOCUS%20v1.1-41%20queries-green.svg)](https://focus.finops.org/)
-[![FOCUS v1.2](https://img.shields.io/badge/FOCUS%20v1.2-53%20queries-orange.svg)](https://focus.finops.org/)
+<p align="center">
+  <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.0-36%20queries-blue.svg" alt="FOCUS v1.0: 36 queries"></a>
+  <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.1-41%20queries-green.svg" alt="FOCUS v1.1: 41 queries"></a>
+  <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.2-53%20queries-orange.svg" alt="FOCUS v1.2: 53 queries"></a>
+</p>
 
-An educational MCP (Model Context Protocol) server for analyzing FOCUS (FinOps Open Cost & Usage Specification) billing data. This server provides AI assistants with powerful tools to query and analyze cloud cost data using the industry-standard FOCUS format.
+# FOCUS MCP Server
+
+Ask your AI assistant what your cloud actually costs. This MCP (Model Context
+Protocol) server connects Claude, or any other MCP client, to your
+[FOCUS](https://focus.finops.org/) billing data, so questions like these become
+one-line prompts instead of hand-written SQL:
+
+- *"What are my highest-cost services by region this month?"*
+- *"Show me commitment discount utilization trends."*
+- *"Which accounts have unusual spending patterns?"*
+- *"Explain the difference between BilledCost and EffectiveCost."*
+
+Under the hood, [DuckDB](https://duckdb.org/) queries your Parquet exports
+directly, whether they sit on local disk, S3, or GCS. There is no data
+warehouse to stand up. The server bundles 130 queries curated from the
+official FOCUS use-case catalog (36 for v1.0, 41 for v1.1, 53 for v1.2), and
+each query cites the page it came from.
 
 ## What is FOCUS?
 
-[FOCUS](https://focus.finops.org/) (FinOps Open Cost & Usage Specification) is an open standard for cloud billing data that provides consistent, normalized cost and usage data across cloud providers like AWS, Azure, and Google Cloud. It enables organizations to:
+[FOCUS](https://focus.finops.org/) (FinOps Open Cost & Usage Specification) is
+the open standard for cloud billing data. AWS, Microsoft, and Google Cloud
+export it natively, so one schema and one set of queries work across
+providers.
 
-- **Standardize** cost data across multiple cloud providers
-- **Simplify** financial analysis and reporting
-- **Enable** consistent FinOps practices
-- **Improve** cost optimization and allocation
+## Quick start
 
-## What This Server Does
+### 1. Get FOCUS data
 
-This MCP server connects AI assistants (like Claude) to your FOCUS billing data, enabling natural language queries for complex cost analysis. Instead of writing SQL manually, you can ask questions like:
+Each provider has an official export path:
 
-- "What are my highest cost services by region this month?"
-- "Show me commitment discount utilization trends"
-- "Find anomalous spending patterns by account"
+- AWS: [FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/) (Data Exports → FOCUS 1.0)
+- Microsoft Azure: [FOCUS setup guide for Microsoft](https://focus.finops.org/get-started/microsoft/)
+- Google Cloud: [FOCUS setup guide for Google Cloud](https://focus.finops.org/get-started/google-cloud/), or see [GCS + BigQuery](#google-cloud-gcs--bigquery-focus-export) below
+- Other providers: [all FOCUS setup guides](https://focus.finops.org/get-started/)
 
-The server provides:
+The server reads Parquet with Hive partitioning:
 
-- 🔍 **36+ predefined queries** from the official FOCUS documentation
-- 📊 **DuckDB-powered analytics** for fast querying of large datasets
-- 🔄 **Multi-version support** (FOCUS v1.0, v1.1, v1.2)
-- 📚 **Schema documentation** with column/attribute definitions from FOCUS spec
-- 🎯 **Educational examples** with citations to official docs
+```
+/path/to/your/focus/data/
+├── billing_period=2025-05/
+│   ├── file1.parquet
+│   └── file2.parquet
+├── billing_period=2025-06/
+│   └── ...
+```
 
-## Features
+### 2. Run the server
 
-### MCP Tools Available
-
-**Data & Query Tools:**
-
-1. **`get_data_info`** - Inspect your loaded FOCUS data (row counts, date ranges, providers)
-2. **`list_use_cases`** - Browse 36+ predefined analysis queries
-3. **`get_use_case`** - Get detailed info about specific queries (SQL, parameters, citations)
-4. **`execute_query`** - Run custom SQL or predefined queries on your data
-
-**Schema & Specification Tools:**
-
-5. **`list_columns`** - List all FOCUS columns with metadata (type, requirement level)
-6. **`get_column_details`** - Get detailed information for specific columns
-7. **`list_attributes`** - List FOCUS formatting standards and conventions
-8. **`get_attribute_details`** - Get detailed requirements for specific attributes
-
-### Query Library
-
-- **36+ Professional Queries (more queries for later versions)**: Curated from [focus.finops.org](https://focus.finops.org/) use cases
-- **Version Support**: Queries for FOCUS v1.0, v1.1, and v1.2
-- **Real-world Scenarios**: Cost optimization, budget tracking, anomaly detection
-- **Official Citations**: Each query links back to the FOCUS documentation
-
-## Quick Start
-
-### 1. Prepare Your FOCUS Data
-
-This server works with FOCUS billing data in Parquet format with Hive partitioning, supporting both local files and S3 storage.
-
-#### Local Data
+Images are published to Docker Hub and GitHub Container Registry on every
+release:
 
 ```bash
-# Set your data location for local files
+docker pull glassity/focus-mcp:latest          # Docker Hub
+docker pull ghcr.io/glassity/focus-mcp:latest  # GHCR
+```
+
+For Claude Code, one command:
+
+```bash
+claude mcp add focus -- docker run -i --rm \
+  -v /path/to/your/focus/data:/data:ro \
+  -e FOCUS_DATA_LOCATION=/data \
+  glassity/focus-mcp:latest
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/path/to/your/focus/data:/data:ro",
+        "-e", "FOCUS_DATA_LOCATION=/data",
+        "-e", "FOCUS_VERSION=1.0",
+        "glassity/focus-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+For S3 or GCS data, drop the volume mount and point `FOCUS_DATA_LOCATION` at
+the bucket. See [Data locations](#data-locations) for the credential options.
+
+### 3. Ask something
+
+Start your client and try:
+
+```
+Show me what FOCUS data is loaded.
+```
+
+The assistant calls `get_data_info` and reports row counts, date ranges, and
+providers. From there, ask in plain language:
+
+```
+Run the service costs by region analysis for the last 3 months.
+Show me the top 10 most expensive services across all accounts.
+Find unused capacity reservations I can optimize.
+Compare costs across providers and regions.
+What columns are available in FOCUS v1.2?
+```
+
+## Tools
+
+Eight tools, in two groups.
+
+Data and query:
+
+| Tool | What it does |
+| --- | --- |
+| `get_data_info` | Inspect the loaded data: row counts, date ranges, providers |
+| `list_use_cases` | Browse the predefined analysis queries for your FOCUS version |
+| `get_use_case` | One query in detail: SQL, parameters, citation to the spec |
+| `execute_query` | Run a predefined query or custom SQL against your data |
+
+Schema and specification:
+
+| Tool | What it does |
+| --- | --- |
+| `list_columns` | All FOCUS columns with type and requirement level |
+| `get_column_details` | Full definition of one column |
+| `list_attributes` | FOCUS formatting standards and conventions |
+| `get_attribute_details` | Full requirements of one attribute |
+
+The schema tools answer from the FOCUS specification itself, so the assistant
+can explain what a column means as well as query it.
+
+## Query library
+
+Every query is extracted from the official
+[FOCUS use-case catalog](https://focus.finops.org/use-cases/) and carries a
+citation back to its source page:
+
+- FOCUS v1.0: 36 queries
+- FOCUS v1.1: 41 queries
+- FOCUS v1.2: 53 queries
+
+Coverage includes cost allocation, commitment discount tracking, anomaly
+detection, budget reconciliation, and provider comparison. `FOCUS_VERSION`
+selects which set is active.
+
+## Data locations
+
+### Local files
+
+```bash
 export FOCUS_DATA_LOCATION="/path/to/your/focus/data"
-
-# Expected structure:
-# /path/to/your/focus/data/
-# ├── billing_period=2025-05/
-# │   ├── file1.parquet
-# │   └── file2.parquet
-# ├── billing_period=2025-06/
-# │   └── ...
 ```
 
-#### S3 Data
+### Amazon S3
 
 ```bash
-# Set your data location for S3
 export FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports"
-
-# Optional: Set AWS region (defaults to us-east-1)
-export AWS_REGION="us-west-2"
-
-# Note: Some S3 buckets store files with a leading slash in the path
-# In such cases, you may need a double slash after the bucket name:
-# export FOCUS_DATA_LOCATION="s3://your-bucket//focus/path"
-
-# Authentication happens automatically via AWS credential chain:
-# 1. IAM Role (automatic on EC2/ECS/Lambda)
-# 2. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-# 3. AWS Profile (set AWS_PROFILE env var to use a specific profile)
-# 4. ~/.aws/credentials file
-
-# Example: Use a specific AWS profile
-export AWS_PROFILE="billing-reader"
+export AWS_REGION="us-west-2"        # defaults to us-east-1
 ```
 
-#### Google Cloud (GCS + BigQuery FOCUS export)
+Authentication uses the standard AWS credential chain, in order: IAM role
+(automatic on EC2/ECS/Lambda), `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`
+environment variables, `AWS_PROFILE`, then `~/.aws/credentials`.
 
-Google Cloud can export billing data natively in FOCUS format:
-**Billing → Billing export → FOCUS usage cost** (Preview) writes a FOCUS
-table to BigQuery. Export it to Parquet in a GCS bucket:
+```bash
+export AWS_PROFILE="billing-reader"   # use a specific profile
+```
+
+Some buckets store keys with a leading slash; if listing fails, try a double
+slash after the bucket name: `s3://your-bucket//focus/path`.
+
+When running in Docker, pass credentials as `-e` variables or mount the
+profile read-only:
+
+```bash
+docker run -i --rm \
+  -v "$HOME/.aws:/home/mcp/.aws:ro" \
+  -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
+  -e AWS_REGION="us-west-2" \
+  -e AWS_PROFILE="billing-reader" \
+  glassity/focus-mcp:latest
+```
+
+### Google Cloud (GCS + BigQuery FOCUS export)
+
+Google Cloud exports billing natively in FOCUS format:
+**Billing → Billing export → FOCUS usage cost** (Preview) writes a FOCUS table
+to BigQuery. Export it to Parquet in a GCS bucket:
 
 ```sql
 EXPORT DATA OPTIONS (
@@ -127,178 +220,56 @@ SELECT * FROM `your-project.your_focus_dataset.your_focus_table`;
 ```
 
 Schedule that statement as a BigQuery scheduled query to keep the bucket
-fresh (this also archives your data past the FOCUS export's 2-year TTL).
-
-Then point the server at the bucket:
+fresh; this also archives your data past the FOCUS export's 2-year TTL. Then:
 
 ```bash
 export FOCUS_DATA_LOCATION="gs://your-bucket/focus-export"
 ```
 
-**Authentication** (tried in this order):
+Authentication is tried in this order:
 
-1. **HMAC keys** — set `GCS_HMAC_KEY_ID` and `GCS_HMAC_SECRET`
-   (create with `gcloud storage hmac create <service-account-email>`).
-   Uses DuckDB's native GCS support over the S3-interoperability API;
-   no extra dependencies.
-2. **Application Default Credentials** — install the gcs extra
-   (`pip install 'focus-mcp[gcs]'`, included in the Docker image) and
-   authenticate however you normally do:
-   `gcloud auth application-default login`, a service-account JSON via
-   `GOOGLE_APPLICATION_CREDENTIALS`, or workload identity on GCE/GKE.
-3. **No credentials** — public buckets only.
+1. HMAC keys: set `GCS_HMAC_KEY_ID` and `GCS_HMAC_SECRET` (create with
+   `gcloud storage hmac create <service-account-email>`). This path uses
+   DuckDB's native GCS support over the S3-interoperability API and needs no
+   extra dependencies.
+2. Application Default Credentials: included in the Docker image; from a
+   source checkout, install the extra with `uv sync --extra gcs`. Then
+   authenticate however you normally do: `gcloud auth application-default
+   login`, a service-account JSON via `GOOGLE_APPLICATION_CREDENTIALS`, or
+   workload identity on GCE/GKE.
+3. No credentials: public buckets only.
 
-Two methods exist because DuckDB's built-in GCS support only speaks
-HMAC; ADC comes from the optional `gcsfs` library. Credentials are only
-ever read inside the server process and are not exposed to MCP clients.
-
-**Getting FOCUS Data:**
-
-- **AWS**: Follow the [official FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/)
-- **Microsoft Azure**: Follow the [official FOCUS setup guide for Microsoft](https://focus.finops.org/get-started/microsoft/)
-- **Google Cloud**: Follow the [official FOCUS setup guide for Google Cloud](https://focus.finops.org/get-started/google-cloud/)
-- **Other Providers**: See [all FOCUS setup guides](https://focus.finops.org/get-started/)
-
-### 2. Install & Configure with Docker (Recommended)
-
-The server is available as a Docker image on both Docker Hub and GitHub Container Registry.
-
-#### Pull the Docker Image
-
-```bash
-# From Docker Hub (recommended)
-docker pull glassity/focus-mcp:latest
-
-# Or from GitHub Container Registry
-docker pull ghcr.io/glassity/focus-mcp:latest
-
-# Or use a specific version
-docker pull glassity/focus-mcp:v0.1.1
-```
-
-#### Configure Claude Desktop
-
-Add to your Claude Desktop `claude_desktop_config.json`:
-
-**For local FOCUS data:**
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v",
-        "/path/to/your/focus/data:/data:ro",
-        "-e",
-        "FOCUS_DATA_LOCATION=/data",
-        "-e",
-        "FOCUS_VERSION=1.0",
-        "glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-**For S3 data with AWS credentials:**
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
-        "-e", "AWS_REGION=us-west-2",
-        "-e", "AWS_ACCESS_KEY_ID=your-access-key",
-        "-e", "AWS_SECRET_ACCESS_KEY=your-secret-key",
-        "glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-**For S3 data with AWS profile:**
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-v", "/Users/YOUR_USERNAME/.aws:/home/mcp/.aws:ro",
-        "-e", "FOCUS_DATA_LOCATION=s3://your-bucket/focus-exports",
-        "-e", "AWS_REGION=us-west-2",
-        "-e", "AWS_PROFILE=billing-reader",
-        "glassity/focus-mcp:latest"
-      ]
-    }
-  }
-}
-```
-
-### 3. Test the Connection
-
-Start Claude Desktop and try:
-
-```
-Can you show me information about my FOCUS data?
-```
-
-Claude will use the `get_data_info` tool to inspect your dataset.
-
-### 4. Usage Examples
-
-```
-# Inspect your data
-"Show me what FOCUS data is loaded"
-
-# Use a predefined query
-"Run the service costs by region analysis for the last 3 months"
-
-# Custom SQL analysis
-"Show me the top 10 most expensive services across all accounts"
-
-# Parameter-based queries
-"Analyze commitment discount utilization for 2025-08-01 to 2025-09-01"
-
-# Anomaly detection
-"Find accounts with unusual spending patterns this month"
-
-# Cost optimization
-"Show me unused capacity reservations that I can optimize"
-
-# Multi-provider analysis
-"Compare costs across different cloud providers and regions"
-
-# Schema exploration
-"What columns are available in FOCUS v1.2?"
-"Explain the difference between BilledCost and EffectiveCost"
-```
+Two methods exist because DuckDB's built-in GCS support only speaks HMAC; ADC
+comes from the optional `gcsfs` dependency. Credentials are only ever read
+inside the server process and are never exposed to MCP clients.
 
 ## Configuration
 
-### Environment Variables
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FOCUS_DATA_LOCATION` | `data/focus-export` | Where the Parquet lives: a local path, `s3://…`, or `gs://…` |
+| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, or `1.2` |
+| `AWS_REGION` | `us-east-1` | Region for S3 access |
+| `AWS_PROFILE` | (unset) | AWS profile for S3 authentication |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | (unset) | Static AWS credentials, if not using a role or profile |
+| `GCS_HMAC_KEY_ID` / `GCS_HMAC_SECRET` | (unset) | HMAC credentials for GCS |
+| `GOOGLE_APPLICATION_CREDENTIALS` | (unset) | Service-account JSON for GCS via ADC |
 
-| Variable              | Default             | Description                                           |
-| --------------------- | ------------------- | ----------------------------------------------------- |
-| `FOCUS_DATA_LOCATION` | `data/focus-export` | Path to FOCUS data (local or S3 URI)                  |
-| `FOCUS_VERSION`       | `1.0`               | FOCUS specification version (1.0, 1.1, 1.2)           |
-| `AWS_REGION`          | `us-east-1`         | AWS region for S3 access                              |
-| `AWS_PROFILE`         | (optional)          | AWS profile name to use for S3 authentication         |
+## Development
 
-### S3 Configuration Example
+```bash
+git clone https://github.com/glassity/focus-mcp.git
+cd focus-mcp
+
+uv sync                 # install (uv recommended)
+uv sync --extra gcs     # + GCS ADC support
+uv sync --extra dev     # + ruff, mypy, black
+
+export FOCUS_DATA_LOCATION="/path/to/your/focus/data"
+uv run python focus_mcp_server.py
+```
+
+Point a client at the source checkout instead of the Docker image:
 
 ```json
 {
@@ -306,71 +277,6 @@ Claude will use the `get_data_info` tool to inspect your dataset.
     "focus": {
       "command": "uv",
       "args": ["run", "--directory", "/path/to/focus-mcp", "python", "focus_mcp_server.py"],
-      "env": {
-        "FOCUS_DATA_LOCATION": "s3://my-billing-bucket/focus-exports",
-        "AWS_REGION": "us-west-2",
-        "AWS_PROFILE": "billing-reader"
-      }
-    }
-  }
-}
-```
-
-The AWS credential chain automatically finds credentials from:
-- IAM roles (when running on AWS infrastructure)
-- Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
-- AWS CLI profiles (set AWS_PROFILE env var to specify which profile)
-- AWS credentials file (~/.aws/credentials)
-
-Note: AWS_PROFILE is a standard AWS environment variable that the credential chain respects.
-
-## Development
-
-For developers who want to contribute or customize the server:
-
-### Installation from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/glassity/focus-mcp.git
-cd focus-mcp
-
-# Install with uv (recommended)
-uv sync
-
-# Or install with pip
-pip install -e .
-
-# Install with dev dependencies for development
-uv sync --extra dev
-```
-
-### Running Locally with uv
-
-```bash
-# Set your data location
-export FOCUS_DATA_LOCATION="data/focus-export"
-
-# Run the server
-uv run python focus_mcp_server.py
-```
-
-### Configure Claude Desktop with Local Installation
-
-Add to your Claude Desktop `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "focus": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/path/to/focus-mcp",
-        "python",
-        "focus_mcp_server.py"
-      ],
       "env": {
         "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
         "FOCUS_VERSION": "1.0"
@@ -380,60 +286,46 @@ Add to your Claude Desktop `claude_desktop_config.json`:
 }
 ```
 
-### Building Your Own Docker Image
+Build and run your own image:
 
 ```bash
-# Build the image
 docker build -t focus-mcp:custom .
-
-# Run your custom image
 docker run -i --rm \
   -v "/path/to/your/focus/data:/data:ro" \
   -e FOCUS_DATA_LOCATION=/data \
   focus-mcp:custom
 ```
 
-### Running Docker Directly (for testing)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and checks before
+opening a pull request.
 
-#### Local FOCUS Data
+## Roadmap
 
-```bash
-docker run -i --rm \
-  -v "/path/to/your/focus/data:/data:ro" \
-  -e FOCUS_DATA_LOCATION=/data \
-  -e FOCUS_VERSION=1.0 \
-  glassity/focus-mcp:latest
-```
+- Automated query synchronization from the FOCUS specification, so new
+  use-case pages land here without manual extraction
+- Richer response formatting: citations and educational context inline in
+  query results
+- Validation of every use-case query against real v1.1 and v1.2 exports
+- Evaluate moving column and attribute definitions to MCP resources
+- Surface conformance-gap notes from the spec in tool responses
 
-#### S3 FOCUS Data
+## Security
 
-**Using AWS credentials from environment:**
+Report vulnerabilities to the address in [SECURITY.md](SECURITY.md), not the
+issue tracker. Know the trust model: `execute_query` runs SQL that the AI
+assistant writes, inside the server process. Your Parquet files are a query
+source, not a writable database, and every example here mounts them `:ro`;
+keep that. Run the Docker image rather than a bare process if you want a hard
+boundary, and give the server only the object-store credentials it needs,
+scoped to the billing bucket.
 
-```bash
-docker run -i --rm \
-  -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
-  -e AWS_REGION="us-west-2" \
-  -e AWS_ACCESS_KEY_ID="your-access-key" \
-  -e AWS_SECRET_ACCESS_KEY="your-secret-key" \
-  glassity/focus-mcp:latest
-```
+## License
 
-**Using AWS profile:**
+Apache-2.0. Copyright Glassity. See [LICENSE](LICENSE).
 
-```bash
-docker run -i --rm \
-  -v "$HOME/.aws:/home/mcp/.aws:ro" \
-  -e FOCUS_DATA_LOCATION="s3://your-bucket/focus-exports" \
-  -e AWS_REGION="us-west-2" \
-  -e AWS_PROFILE="billing-reader" \
-  glassity/focus-mcp:latest
-```
+---
 
-## Todo
-
-- [ ] Implement automated query synchronization from FOCUS specification
-- [x] Extract column definitions and attributes from FOCUS spec for enhanced data insights
-- [ ] Enhance response formatting with citations and educational context for AI models
-- [ ] Validate all use cases queries against v1.1 and v1.2 exports
-- [ ] Evaluate if moving attributes/columns to MCP resources makes more sense
-- [ ] Review conformance gap documents for additional documentation and insights to share in the responses
+<p align="center">
+  Built by <a href="https://glassity.cloud">Glassity</a>, cloud cost
+  visibility and optimization for AWS.
+</p>

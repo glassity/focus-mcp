@@ -199,7 +199,7 @@ class QueryLoader:
 
         # Add SQL preview
         sql_preview = query.query[:200] + "..." if len(query.query) > 200 else query.query
-        info.append(f"\nSQL Preview:")
+        info.append("\nSQL Preview:")
         info.append(sql_preview)
 
         # Add source
