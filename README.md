@@ -111,6 +111,47 @@ export AWS_REGION="us-west-2"
 export AWS_PROFILE="billing-reader"
 ```
 
+#### Google Cloud (GCS + BigQuery FOCUS export)
+
+Google Cloud can export billing data natively in FOCUS format:
+**Billing → Billing export → FOCUS usage cost** (Preview) writes a FOCUS
+table to BigQuery. Export it to Parquet in a GCS bucket:
+
+```sql
+EXPORT DATA OPTIONS (
+  uri = 'gs://your-bucket/focus-export/*.parquet',
+  format = 'PARQUET',
+  overwrite = true
+) AS
+SELECT * FROM `your-project.your_focus_dataset.your_focus_table`;
+```
+
+Schedule that statement as a BigQuery scheduled query to keep the bucket
+fresh (this also archives your data past the FOCUS export's 2-year TTL).
+
+Then point the server at the bucket:
+
+```bash
+export FOCUS_DATA_LOCATION="gs://your-bucket/focus-export"
+```
+
+**Authentication** (tried in this order):
+
+1. **HMAC keys** — set `GCS_HMAC_KEY_ID` and `GCS_HMAC_SECRET`
+   (create with `gcloud storage hmac create <service-account-email>`).
+   Uses DuckDB's native GCS support over the S3-interoperability API;
+   no extra dependencies.
+2. **Application Default Credentials** — install the gcs extra
+   (`pip install 'focus-mcp[gcs]'`, included in the Docker image) and
+   authenticate however you normally do:
+   `gcloud auth application-default login`, a service-account JSON via
+   `GOOGLE_APPLICATION_CREDENTIALS`, or workload identity on GCE/GKE.
+3. **No credentials** — public buckets only.
+
+Two methods exist because DuckDB's built-in GCS support only speaks
+HMAC; ADC comes from the optional `gcsfs` library. Credentials are only
+ever read inside the server process and are not exposed to MCP clients.
+
 **Getting FOCUS Data:**
 
 - **AWS**: Follow the [official FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/)
