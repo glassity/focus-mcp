@@ -43,6 +43,19 @@ BILLING_PERIOD_EXPR = (
     r"regexp_extract(filename, '(?i)billing_period=(\d{4}-\d{2})', 1)"
 )
 
+# Renames the spec declares, as (current name, former name). A dataset can
+# hold periods from either side of one: providers lag the spec and upgrade
+# mid-stream, and union_by_name then yields both columns, each populated
+# only for its own periods. focus_data_table exposes both names covering
+# every period, so a query is not silently missing half its rows.
+#
+# Only declared renames belong here. PublisherName is deprecated in 1.3
+# with no replacement named, so pairing it with HostProviderName would put
+# wrong values behind a right-looking name.
+COLUMN_RENAMES = [
+    ("ServiceProviderName", "ProviderName"),
+]
+
 # dataFiles holds the URIs of the bucket the export was delivered to. A
 # copy of that export (aws s3 sync into a directory, a mirror in another
 # bucket) keeps AWS's data/<PARTITION>/[<execution>/]<file> layout but not
@@ -137,7 +150,7 @@ def manifest_view_sql(data_files: list[str]) -> str:
     """
     file_list = ", ".join(_sql_literal(f) for f in data_files)
     return f"""
-        CREATE OR REPLACE VIEW focus_data_table AS
+        CREATE OR REPLACE VIEW focus_data_raw AS
         SELECT * EXCLUDE (filename), {BILLING_PERIOD_EXPR} AS billing_period
         FROM read_parquet(
             [{file_list}],
@@ -157,7 +170,7 @@ def glob_view_sql(location: str, hive_partitioning: bool) -> str:
     pattern = _sql_literal(f"{location}/**/*.parquet")
     if hive_partitioning:
         return f"""
-            CREATE OR REPLACE VIEW focus_data_table AS
+            CREATE OR REPLACE VIEW focus_data_raw AS
             SELECT * FROM read_parquet(
                 {pattern}, union_by_name=true, hive_partitioning=true
             )
@@ -165,7 +178,7 @@ def glob_view_sql(location: str, hive_partitioning: bool) -> str:
     # Retry path: inference is off, so billing_period is derived from the
     # path instead of being dropped from the view.
     return f"""
-        CREATE OR REPLACE VIEW focus_data_table AS
+        CREATE OR REPLACE VIEW focus_data_raw AS
         SELECT * EXCLUDE (filename), {BILLING_PERIOD_EXPR} AS billing_period
         FROM read_parquet(
             {pattern},
@@ -250,6 +263,53 @@ def _create_glob_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
     return "glob"
 
 
+def _reconcile_renamed_columns(conn: duckdb.DuckDBPyConnection) -> list[str]:
+    """Layer focus_data_table over focus_data_raw, reconciling renames.
+
+    Each rename pair has three cases. Only one name present: the other is
+    aliased to it. Both present, because the data spans the rename: each is
+    coalesced over the other, so both cover every period instead of each
+    covering half. Neither: nothing to do.
+
+    Returns a description of what was reconciled, for the caller to log.
+    """
+    present = {
+        row[0]
+        for row in conn.execute(
+            "SELECT column_name FROM duckdb_columns() "
+            "WHERE table_name = 'focus_data_raw'"
+        ).fetchall()
+    }
+
+    projected: list[str] = []
+    superseded: list[str] = []
+    reconciled: list[str] = []
+    for current, former in COLUMN_RENAMES:
+        has_current, has_former = current in present, former in present
+        if has_current and has_former:
+            superseded += [current, former]
+            projected += [
+                f'COALESCE("{current}", "{former}") AS "{current}"',
+                f'COALESCE("{former}", "{current}") AS "{former}"',
+            ]
+            reconciled.append(f"{current}/{former} (merged across periods)")
+        elif has_current:
+            projected.append(f'"{current}" AS "{former}"')
+            reconciled.append(former)
+        elif has_former:
+            projected.append(f'"{former}" AS "{current}"')
+            reconciled.append(current)
+
+    star = "*"
+    if superseded:
+        star = "* EXCLUDE (" + ", ".join(f'"{c}"' for c in superseded) + ")"
+    conn.execute(
+        f"CREATE OR REPLACE VIEW focus_data_table AS "
+        f"SELECT {', '.join([star, *projected])} FROM focus_data_raw"
+    )
+    return reconciled
+
+
 def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
     """Create the focus_data_table view over the data at the location.
 
@@ -257,10 +317,21 @@ def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
     over what turns out to be an export is the failure mode this module
     exists to avoid, and it is invisible otherwise.
 
+    The strategies build focus_data_raw; focus_data_table reconciles the
+    COLUMN_RENAMES on top of it and is what queries run against.
+
     Errors propagate: the caller decides whether to attach a backend hint
     to them.
     """
     manifests = discover_manifests(conn, location)
     if manifests:
-        return _create_manifest_view(conn, location, manifests)
-    return _create_glob_view(conn, location)
+        strategy = _create_manifest_view(conn, location, manifests)
+    else:
+        strategy = _create_glob_view(conn, location)
+    reconciled = _reconcile_renamed_columns(conn)
+    if reconciled:
+        logger.info(
+            "Exposing renamed FOCUS column(s) under both names: %s",
+            ", ".join(reconciled),
+        )
+    return strategy

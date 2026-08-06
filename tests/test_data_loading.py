@@ -76,6 +76,17 @@ def write_period(root, partition, rows, manifest=True):
     return data_file
 
 
+def write_one_column(root, select_sql, partition="billing_period=2026-04"):
+    """Write a single-file period from an arbitrary SELECT."""
+    data_file = root / "data" / partition / "part.parquet"
+    data_file.parent.mkdir(parents=True)
+    duckdb.connect().execute(f"COPY ({select_sql}) TO '{data_file}' (FORMAT parquet)")
+    write_manifest(
+        root / "metadata" / partition / "focus-export-Manifest.json", [data_file]
+    )
+    return data_file
+
+
 def view_rows(conn):
     return conn.execute(
         "SELECT ProviderName, BilledCost, billing_period FROM focus_data_table"
@@ -251,7 +262,8 @@ def test_manifest_view_hides_the_filename_column(conn, tmp_path):
     write_period(tmp_path, "billing_period=2026-04", [("AWS", 1.0)])
     create_focus_view(conn, str(tmp_path))
     cols = [r[0] for r in conn.execute("DESCRIBE focus_data_table").fetchall()]
-    assert cols == ["ProviderName", "BilledCost", "billing_period"]
+    assert "filename" not in cols
+    assert cols[:3] == ["ProviderName", "BilledCost", "billing_period"]
 
 
 def test_manifest_view_unions_differing_schemas(conn, tmp_path):
@@ -363,3 +375,56 @@ def test_hive_mismatch_retry_unions_differing_schemas(conn, tmp_path):
 def test_glob_failure_propagates(conn, tmp_path):
     with pytest.raises(duckdb.Error):
         create_focus_view(conn, str(tmp_path))
+
+
+# --- renamed columns ---
+
+def test_exposes_the_new_name_for_pre_1_3_data(conn, tmp_path):
+    write_period(tmp_path, "billing_period=2026-04", [("AWS", 1.0)])
+    create_focus_view(conn, str(tmp_path))
+    assert conn.execute(
+        "SELECT ServiceProviderName FROM focus_data_table"
+    ).fetchall() == [("AWS",)]
+
+
+def test_exposes_the_former_name_for_1_3_data(conn, tmp_path):
+    write_one_column(tmp_path, "SELECT 'AWS' AS ServiceProviderName")
+    create_focus_view(conn, str(tmp_path))
+    # A query written against 1.2 must still bind on an export speaking 1.3.
+    assert conn.execute(
+        "SELECT ProviderName FROM focus_data_table"
+    ).fetchall() == [("AWS",)]
+
+
+def test_merges_both_names_when_the_data_spans_the_rename(conn, tmp_path):
+    # A provider that upgrades mid-stream leaves each name populated only
+    # for its own periods; union_by_name then yields both, each half null.
+    # Grouping on either name must still see every row.
+    before = tmp_path / "data" / "billing_period=2026-04" / "part.parquet"
+    after = tmp_path / "data" / "billing_period=2026-05" / "part.parquet"
+    for path, sql in (
+        (before, "SELECT 'AWS' AS ProviderName, 1.0 AS BilledCost"),
+        (after, "SELECT 'AWS' AS ServiceProviderName, 2.0 AS BilledCost"),
+    ):
+        path.parent.mkdir(parents=True)
+        duckdb.connect().execute(f"COPY ({sql}) TO '{path}' (FORMAT parquet)")
+        write_manifest(
+            tmp_path / "metadata" / path.parent.name
+            / "focus-export-Manifest.json",
+            [path],
+        )
+    create_focus_view(conn, str(tmp_path))
+
+    for column in ("ProviderName", "ServiceProviderName"):
+        assert conn.execute(
+            f"SELECT {column}, SUM(BilledCost) FROM focus_data_table"
+            f" GROUP BY 1"
+        ).fetchall() == [("AWS", 3.0)], f"{column} lost a period"
+
+
+def test_no_column_is_invented_when_neither_name_is_present(conn, tmp_path):
+    write_one_column(tmp_path, "SELECT 1.0 AS BilledCost")
+    create_focus_view(conn, str(tmp_path))
+    cols = [r[0] for r in conn.execute("DESCRIBE focus_data_table").fetchall()]
+    assert "ServiceProviderName" not in cols
+    assert "ProviderName" not in cols
