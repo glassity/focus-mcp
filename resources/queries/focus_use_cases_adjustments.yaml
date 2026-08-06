@@ -213,3 +213,94 @@ allocate_application_multi_currency:
              BillingAccountId,
              BillingAccountName,
              BillingCurrency
+identify_sources_of_billed_cost:
+  fix_comment: "InvoiceIssuer was renamed to InvoiceIssuerName in FOCUS 1.1; AWS FOCUS 1.2 exports only carry InvoiceIssuerName."
+  sql: |-
+    SELECT ProviderName,
+           PublisherName,
+           InvoiceIssuerName,
+           InvoiceID,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY ProviderName,
+             PublisherName,
+             InvoiceIssuerName,
+             InvoiceID
+
+verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
+  fix_comment: "InvoiceIssuer was renamed to InvoiceIssuerName in FOCUS 1.1; AWS FOCUS 1.2 exports only carry InvoiceIssuerName."
+  sql: |-
+    SELECT InvoiceIssuerName,
+           InvoiceID,
+           SUM(BilledCost) AS TotalBilledCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+    GROUP BY InvoiceIssuerName,
+             InvoiceID
+
+calculate_average_rate_of_a_component_resource:
+  fix_comment: "JSON_UNQUOTE, JSON_CONTAINS_PATH and CAST AS UNSIGNED are MySQL-only. json_extract_string, json_exists and BIGINT are the DuckDB equivalents, and work over both the MAP that AWS delivers for SkuPriceDetails and the JSON the specification describes."
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries,
+           SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount,
+           CASE
+               WHEN SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) > 0 THEN SUM(EffectiveCost) / SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT))
+               ELSE NULL
+           END AS AverageEffectiveCoreCost
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND json_exists(SkuPriceDetails, '$.CoreCount')
+      AND json_exists(SkuPriceDetails, '$.InstanceSeries')
+    GROUP BY ProviderName,
+             ServiceName,
+             PricingUnit,
+             RegionName,
+             InstanceSeries
+
+quantify_usage_of_a_component_resource:
+  fix_comment: "JSON_UNQUOTE, JSON_CONTAINS_PATH and CAST AS UNSIGNED are MySQL-only. json_extract_string, json_exists and BIGINT are the DuckDB equivalents, and work over both the MAP that AWS delivers for SkuPriceDetails and the JSON the specification describes."
+  sql: |-
+    SELECT ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries,
+           SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND json_exists(SkuPriceDetails, '$.CoreCount')
+      AND json_exists(SkuPriceDetails, '$.InstanceSeries')
+    GROUP BY ProviderName,
+             ServiceName,
+             PricingUnit,
+             RegionName,
+             InstanceSeries
+
+determine_contracted_savings_by_virtual_currency:
+  fix_comment: "Upstream query is missing the comma between the two SUM expressions and names the table focus_data_tabl."
+  sql: |-
+    SELECT ServiceName,
+           ServiceSubcategory,
+           ChargeDescription,
+           BillingCurrency,
+           PricingCurrency,
+           SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency,
+           SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
+    FROM focus_data_table
+    WHERE ChargePeriodStart >= ?
+      and ChargePeriodEnd < ?
+      AND PricingCurrencyListUnitPrice > PricingCurrencyContractedUnitPrice
+    GROUP BY ServiceName,
+             ServiceSubcategory,
+             ChargeDescription,
+             BillingCurrency,
+             PricingCurrency
