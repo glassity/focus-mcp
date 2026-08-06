@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Prove a built wheel installs clean and serves MCP from a foreign directory.
+"""Prove a built wheel or sdist installs clean and serves MCP from a foreign directory.
 
 Usage:
     uv run python scripts/verify_package.py dist/focus_mcp-0.2.0-py3-none-any.whl
+    uv run python scripts/verify_package.py dist/focus_mcp-0.2.0.tar.gz
 
-Checks, in order:
-  1. The wheel contains exactly one top-level package and no repo scaffolding.
-  2. The packaged resources are present inside it.
-  3. Installed into a clean venv and launched from an unrelated working
+Accepts either a wheel (.whl) or an sdist (.tar.gz). Checks, in order:
+  1. For a wheel only: it contains exactly one top-level package and no repo
+     scaffolding, and the packaged resources are present inside it. An sdist
+     legitimately contains tests/, pyproject.toml and other files this check
+     would reject, so it does not apply and is skipped for sdists.
+  2. Installed into a clean venv and launched from an unrelated working
      directory, the console script completes an MCP handshake and list_columns
      returns a non-empty column set.
 
-Check 3 is the one that matters. It exercises the console script, the entry
-point, package imports, FastMCP wiring and resource loading in a single
-assertion, which is the whole failure surface between "the wheel built" and
-"uvx focus-mcp works".
+Check 2 is the one that matters, for both artifact types. It exercises the
+console script, the entry point, package imports, FastMCP wiring and resource
+loading in a single assertion, which is the whole failure surface between
+"the package built" and "uvx focus-mcp works". For the sdist it additionally
+exercises the build-from-source path (installing an sdist makes uv/pip invoke
+the build backend), which a wheel install never touches.
 """
 
 import asyncio
@@ -46,6 +51,14 @@ EXPECTED_TOOLS = {
 }
 
 
+def artifact_kind(artifact: Path) -> str:
+    if artifact.suffix == ".whl":
+        return "wheel"
+    if artifact.name.endswith(".tar.gz"):
+        return "sdist"
+    raise SystemExit(f"unsupported artifact type: {artifact.name} (expected .whl or .tar.gz)")
+
+
 def check_wheel_contents(wheel: Path) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
@@ -64,10 +77,10 @@ def check_wheel_contents(wheel: Path) -> None:
     print(f"wheel contents OK ({len(names)} members)")
 
 
-def install_into_clean_venv(wheel: Path, venv: Path) -> Path:
+def install_into_clean_venv(artifact: Path, venv: Path) -> Path:
     subprocess.run(["uv", "venv", "--python", sys.executable, str(venv)], check=True)
     subprocess.run(
-        ["uv", "pip", "install", "--python", str(venv / "bin" / "python"), str(wheel)],
+        ["uv", "pip", "install", "--python", str(venv / "bin" / "python"), str(artifact)],
         check=True,
     )
     script = venv / "bin" / "focus-mcp"
@@ -104,22 +117,28 @@ async def handshake(script: Path, cwd: Path) -> None:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: verify_package.py <wheel>")
+        raise SystemExit("usage: verify_package.py <wheel-or-sdist>")
 
-    wheel = Path(sys.argv[1]).resolve()
-    if not wheel.is_file():
-        raise SystemExit(f"no such wheel: {wheel}")
+    artifact = Path(sys.argv[1]).resolve()
+    if not artifact.is_file():
+        raise SystemExit(f"no such artifact: {artifact}")
 
-    check_wheel_contents(wheel)
+    kind = artifact_kind(artifact)
+    print(f"verifying {kind}: {artifact.name}")
+
+    if kind == "wheel":
+        check_wheel_contents(artifact)
+    else:
+        print("skipping wheel-content check (not applicable to an sdist)")
 
     with tempfile.TemporaryDirectory() as tmp:
         tmpdir = Path(tmp)
-        script = install_into_clean_venv(wheel, tmpdir / "venv")
+        script = install_into_clean_venv(artifact, tmpdir / "venv")
         workdir = tmpdir / "workdir"
         workdir.mkdir()
         asyncio.run(handshake(script, workdir))
 
-    print("package verification passed")
+    print(f"{kind} verification passed")
 
 
 if __name__ == "__main__":
