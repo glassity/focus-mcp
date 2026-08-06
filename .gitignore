@@ -71,7 +71,11 @@ dmypy.json
 # Local MCP config
 .mcp.json
 
-# Scripts folder (exclude contents but keep folder)
+# Scripts folder (exclude contents but keep folder). Scripts that CI runs,
+# or that regenerate a resource we ship, are tracked; ad-hoc local ones are
+# not, so that what produced resources/ is always in the repo.
 scripts/*
 !scripts/.keep
 !scripts/verify_package.py
+!scripts/sync_use_cases.py
+!scripts/focus_spec_markdown_extractor.py

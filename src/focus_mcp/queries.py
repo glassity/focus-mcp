@@ -56,6 +56,8 @@ class Query:
         focus_versions: FOCUS specification versions this query supports
         citation: Source URL from focus.finops.org
         slug: URL-friendly identifier
+        adapted: Whether the SQL departs from upstream's, which CC BY
+            requires be stated alongside the attribution
     """
     name: str
     description: str
@@ -63,6 +65,7 @@ class Query:
     focus_versions: List[str] = field(default_factory=list)
     citation: str = ""
     slug: str = ""
+    adapted: bool = False
 
 
 class QueryLoader:
@@ -81,7 +84,6 @@ class QueryLoader:
     def __init__(self):
         """Initialize the query loader and load version-specific queries."""
         self.queries: Dict[str, Query] = {}
-        self.adjustments: Dict[str, dict] = {}  # Store raw adjustments with comments
         self._load_queries()
 
     def _load_queries(self):
@@ -89,23 +91,22 @@ class QueryLoader:
         Load all queries from the YAML file and filter by FOCUS version.
 
         The loading process:
-        1. Loads the comprehensive YAML file with all use cases
-        2. Loads adjustments from focus_query_adjustments.yaml
-        3. Applies adjustments by overriding fields
-        4. Filters queries based on configured FOCUS_VERSION
-        5. Converts YAML data to Query objects with full metadata
-        6. Indexes queries by slug for flexible access
+        1. Loads focus_use_cases.yaml, which holds the queries as they run
+        2. Filters queries based on configured FOCUS_VERSION
+        3. Converts YAML data to Query objects with full metadata
+        4. Indexes queries by slug for flexible access
 
-        This approach provides version-specific query sets while maintaining
-        all metadata from the focus.finops.org website.
+        Corrections to upstream's SQL live in that same file rather than in
+        an overlay applied here, so the text on disk is the text that runs.
+        Each corrected query carries a fix_comment, and CI checks those
+        against upstream/focus_use_cases.yaml.
         """
-        # Find the YAML files that ship inside the package
+        # Find the YAML file that ships inside the package
         yaml_file = resource_path("queries", "focus_use_cases.yaml")
-        adjustments_file = resource_path("queries", "focus_use_cases_adjustments.yaml")
 
         if not yaml_file.exists():
             print(f"Warning: Query file {yaml_file} does not exist", file=sys.stderr)
-            print("Run 'python scrape_to_yaml.py' to generate it", file=sys.stderr)
+            print("Run 'python scripts/sync_use_cases.py' to generate it", file=sys.stderr)
             return
 
         try:
@@ -115,29 +116,11 @@ class QueryLoader:
             print(f"Error loading queries from {yaml_file}: {e}", file=sys.stderr)
             return
 
-        # Load adjustments if file exists
-        if adjustments_file.exists():
-            try:
-                with open(adjustments_file, 'r', encoding='utf-8') as f:
-                    self.adjustments = yaml.safe_load(f) or {}
-                print(f"Loaded {len(self.adjustments)} query adjustments", file=sys.stderr)
-            except Exception as e:
-                print(f"Error loading adjustments from {adjustments_file}: {e}", file=sys.stderr)
-                self.adjustments = {}
-
         # Normalize the configured version (e.g., "1.0" -> "v1.0")
         configured_version = f"v{config.FOCUS_VERSION}"
 
         # Process each query
         for key, query_data in all_queries.items():
-            # Apply adjustments if they exist for this query
-            if key in self.adjustments:
-                adjustment = self.adjustments[key]
-                # Override fields from adjustment (except fix_comment)
-                for field, value in adjustment.items():
-                    if field != 'fix_comment':
-                        query_data[field] = value
-
             # Filter by FOCUS version
             focus_versions = query_data.get('focus_versions', [])
             if not version_satisfies(configured_version, focus_versions):
@@ -150,7 +133,8 @@ class QueryLoader:
                 query=query_data.get('sql', ''),
                 focus_versions=focus_versions,
                 citation=query_data.get('source_url', ''),
-                slug=query_data.get('slug', key)
+                slug=query_data.get('slug', key),
+                adapted=bool(query_data.get('fix_comment'))
             )
 
             # Index by slug (key)
@@ -219,9 +203,12 @@ class QueryLoader:
         info.append("\nSQL Preview:")
         info.append(sql_preview)
 
-        # Add source
+        # Add source. The library is CC BY 4.0, which requires both the
+        # attribution and a statement of whether the work was modified.
         if query.citation:
+            adapted = " - adapted for DuckDB" if query.adapted else ""
             info.append(f"\nSource: {query.citation}")
+            info.append(f"(FOCUS use case library, CC BY 4.0{adapted})")
 
         return "\n".join(info)
 

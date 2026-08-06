@@ -1,0 +1,63 @@
+name: Sync use cases
+
+# Opens a pull request when the FinOps Foundation changes its use case
+# library. It never pushes to main: upstream ships SQL it does not test
+# against DuckDB, and a version bump can change which columns a query
+# needs, so every change is reviewed by hand.
+
+on:
+  schedule:
+    # Mondays, 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Sync the use case library
+        id: sync
+        run: |
+          uv run python scripts/sync_use_cases.py > sync-report.txt
+          cat sync-report.txt
+
+      - name: Check whether anything changed
+        id: changed
+        run: |
+          if git diff --quiet -- src/focus_mcp/resources/queries; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream library is unchanged."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No test step here on purpose. A stale fix_comment fails the library
+      # invariants, and that is precisely the case worth opening a pull
+      # request for; the pull request runs the suite itself.
+      - name: Open a pull request
+        if: steps.changed.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/sync-use-cases
+          base: main
+          title: "Sync the FOCUS use case library"
+          commit-message: "Sync the FOCUS use case library"
+          delete-branch: true
+          body-path: sync-report.txt
+          add-paths: src/focus_mcp/resources/queries

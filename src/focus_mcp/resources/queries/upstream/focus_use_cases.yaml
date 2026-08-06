@@ -1,11 +1,8 @@
-# The queries this server actually runs.
+# Verbatim snapshot of the FinOps Foundation use case library.
 #
-# Derived from upstream/focus_use_cases.yaml. A query that departs from
-# that snapshot MUST carry a fix_comment saying why; CI fails on an
-# unexplained divergence, and on a fix_comment whose query no longer
-# differs from upstream.
-#
-# See CONTRIBUTING.md, "Fixing upstream queries".
+# Machine-written by scripts/sync_use_cases.py. Do not edit by hand: it is
+# the baseline every local correction is measured against, so an edit here
+# silently redefines what counts as "unchanged from upstream".
 #
 # Source: https://focus.finops.org/use-cases/  (CC BY 4.0)
 
@@ -29,7 +26,6 @@ understand_the_billing_account_or_sub_account_entity:
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
 identify_sources_of_billed_cost:
-  fix_comment: InvoiceIssuer was renamed to InvoiceIssuerName in FOCUS 1.1; AWS FOCUS 1.2 exports only carry InvoiceIssuerName.
   title: Identify sources of billed cost
   slug: identify-sources-of-billed-cost
   date_created: '2025-06-01T18:58:25'
@@ -43,7 +39,7 @@ identify_sources_of_billed_cost:
   sql: |-
     SELECT ProviderName,
            PublisherName,
-           InvoiceIssuerName,
+           InvoiceIssuer,
            InvoiceID,
            SUM(BilledCost) AS TotalBilledCost
     FROM focus_data_table
@@ -51,7 +47,7 @@ identify_sources_of_billed_cost:
       and ChargePeriodEnd < ?
     GROUP BY ProviderName,
              PublisherName,
-             InvoiceIssuerName,
+             InvoiceIssuer,
              InvoiceID
 analyze_credit_memos:
   title: Analyze credit memos
@@ -75,7 +71,6 @@ analyze_credit_memos:
     GROUP BY ProviderName,
              InvoiceID
 verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
-  fix_comment: InvoiceIssuer was renamed to InvoiceIssuerName in FOCUS 1.1; AWS FOCUS 1.2 exports only carry InvoiceIssuerName.
   title: Verify accuracy of provider invoices aka invoice reconciliation
   slug: verify-accuracy-of-provider-invoices-aka-invoice-reconciliation
   date_created: '2025-06-01T18:55:43'
@@ -87,16 +82,15 @@ verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
   - v1.2
   source_url: https://focus.finops.org/use-case/verify-accuracy-of-provider-invoices-aka-invoice-reconciliation/
   sql: |-
-    SELECT InvoiceIssuerName,
+    SELECT InvoiceIssuer,
            InvoiceID,
            SUM(BilledCost) AS TotalBilledCost
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-    GROUP BY InvoiceIssuerName,
+    GROUP BY InvoiceIssuer,
              InvoiceID
 calculate_average_rate_of_a_component_resource:
-  fix_comment: JSON_UNQUOTE, JSON_CONTAINS_PATH and CAST AS UNSIGNED are MySQL-only. json_extract_string, json_exists and BIGINT are the DuckDB equivalents, and work over both the MAP that AWS delivers for SkuPriceDetails and the JSON the specification describes.
   title: Calculate average rate of a component resource
   slug: calculate-average-rate-of-a-component-resource
   date_created: '2025-05-30T20:54:03'
@@ -112,24 +106,22 @@ calculate_average_rate_of_a_component_resource:
            ServiceName,
            PricingUnit,
            RegionName,
-           json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries,
-           SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount,
+           JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+           SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount,
            CASE
-               WHEN SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) > 0 THEN SUM(EffectiveCost) / SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT))
+               WHEN SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) > 0 THEN SUM(EffectiveCost) / SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED))
                ELSE NULL
            END AS AverageEffectiveCoreCost
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-      AND json_exists(SkuPriceDetails, '$.CoreCount')
-      AND json_exists(SkuPriceDetails, '$.InstanceSeries')
+      AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
     GROUP BY ProviderName,
              ServiceName,
              PricingUnit,
              RegionName,
              InstanceSeries
 quantify_usage_of_a_component_resource:
-  fix_comment: JSON_UNQUOTE, JSON_CONTAINS_PATH and CAST AS UNSIGNED are MySQL-only. json_extract_string, json_exists and BIGINT are the DuckDB equivalents, and work over both the MAP that AWS delivers for SkuPriceDetails and the JSON the specification describes.
   title: Quantify usage of a component resource
   slug: quantify-usage-of-a-component-resource
   date_created: '2025-05-30T20:47:27'
@@ -145,13 +137,12 @@ quantify_usage_of_a_component_resource:
            ServiceName,
            PricingUnit,
            RegionName,
-           json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries,
-           SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount
+           JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+           SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-      AND json_exists(SkuPriceDetails, '$.CoreCount')
-      AND json_exists(SkuPriceDetails, '$.InstanceSeries')
+      AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
     GROUP BY ProviderName,
              ServiceName,
              PricingUnit,
@@ -279,7 +270,6 @@ analyze_purchase_of_virtual_currency:
              PricingUnit,
              BillingCurrency
 determine_contracted_savings_by_virtual_currency:
-  fix_comment: Upstream query is missing the comma between the two SUM expressions and names the table focus_data_tabl.
   title: Determine contracted savings by virtual currency
   slug: determine-contracted-savings-by-virtual-currency
   date_created: '2025-05-28T23:37:50'
@@ -296,9 +286,8 @@ determine_contracted_savings_by_virtual_currency:
            ChargeDescription,
            BillingCurrency,
            PricingCurrency,
-           SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency,
-           SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
-    FROM focus_data_table
+           SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
+    FROM focus_data_tabl
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
       AND PricingCurrencyListUnitPrice > PricingCurrencyContractedUnitPrice
@@ -308,7 +297,6 @@ determine_contracted_savings_by_virtual_currency:
              BillingCurrency,
              PricingCurrency
 analyze_tag_coverage:
-  fix_comment: JSON_CONTAINS_PATH is not supported in DuckDB. Replaced with json_extract_string to check if a tag exists. The '$.?' placeholder is replaced with '$.' || ? to dynamically build the JSON path.
   title: Analyze tag coverage
   slug: analyze-tag-coverage
   date_created: '2024-11-19T07:00:01'
@@ -323,7 +311,7 @@ analyze_tag_coverage:
   source_url: https://focus.finops.org/use-case/analyze-tag-coverage/
   sql: |-
     SELECT SUM(CASE
-                   WHEN json_extract_string(Tags, '$.' || ?) IS NOT NULL THEN EffectiveCost
+                   WHEN JSON_CONTAINS_PATH(tags, 'one', '$.?') THEN EffectiveCost
                    ELSE 0
                END) / SUM(EffectiveCost) * 100 AS TaggedPercentage
     FROM focus_data_table
@@ -517,7 +505,6 @@ recurring_commitment_charges:
              CommitmentDiscountType,
              ChargeFrequency
 costs_service_name:
-  fix_comment: MonthlyCost column does not exist in any version of FOCUS specification. Changed ORDER BY to use TotalEffectiveCost which is the calculated aggregate.
   title: Analyze costs by service name
   slug: costs-service-name
   date_created: '2024-05-22T18:08:25'
@@ -547,7 +534,7 @@ costs_service_name:
              SubAccountId,
              SubAccountName,
              ServiceName
-    ORDER BY TotalEffectiveCost DESC
+    ORDER BY MonthlyCost DESC
 report_spending_across_billing_periods_by_service_category:
   title: Report spending across billing periods for a provider by service category
   slug: report-spending-across-billing-periods-by-service-category
@@ -611,7 +598,6 @@ analyze_service_costs_by_region:
     ORDER BY ChargePeriodStart,
              SUM(EffectiveCost) DESC
 report_service_costs_by_providers_subaccount:
-  fix_comment: GROUP BY issue - ORDER BY references BillingPeriodStart which is not in GROUP BY. Changed to ChargePeriodStart which is in the GROUP BY clause.
   title: Report service costs by providers subaccount
   slug: report-service-costs-by-providers-subaccount
   date_created: '2024-05-22T17:59:56'
@@ -640,7 +626,7 @@ report_service_costs_by_providers_subaccount:
              SubAccountId,
              ChargePeriodStart
     ORDER BY SUM(EffectiveCost),
-             ChargePeriodStart DESC
+             BillingPeriodStart DESC
 service_costs_month_over_month:
   title: Analyze service costs month over month
   slug: service-costs-month-over-month
@@ -668,7 +654,6 @@ service_costs_month_over_month:
     ORDER BY MONTH(ChargePeriodStart),
              SUM(EffectiveCost) DESC
 application_cost:
-  fix_comment: DuckDB does not support Tags["Application"] syntax for JSON field access. Changed to use Tags->>'Application' which is the correct DuckDB JSON extraction syntax.
   title: Report application cost month over month
   slug: application-cost
   date_created: '2024-05-10T21:39:17'
@@ -686,7 +671,7 @@ application_cost:
            ServiceName,
            SUM(EffectiveCost) AS TotalEffectiveCost
     FROM focus_data_table
-    WHERE Tags->>'Application' = ?
+    WHERE Tags["Application"] = ?
       AND ChargePeriodStart >= ?
       AND ChargePeriodEnd < ?
     GROUP BY MONTH(BillingPeriodStart),
@@ -808,7 +793,6 @@ effective_cost_compute:
              SubAccountName,
              BillingPeriodStart
 commitment_discount_purchases:
-  fix_comment: CommitmentDiscountUnit column only exists in FOCUS v1.1 and v1.2, not in v1.0. Updated focus_versions to exclude v1.0.
   title: Report commitment discount purchases
   slug: commitment-discount-purchases
   date_created: '2024-05-10T20:18:37'
@@ -817,6 +801,7 @@ commitment_discount_purchases:
   link: https://focus.finops.org/use-case/commitment-discount-purchases/
   description: Tracking and reconciling commitment-based discounts across providers is a key to success for FinOps.
   focus_versions:
+  - v1.0
   - v1.1
   - v1.2
   source_url: https://focus.finops.org/use-case/commitment-discount-purchases/
@@ -844,7 +829,6 @@ commitment_discount_purchases:
              CommitmentDiscountQuantity,
              ChargeFrequency
 effective_savings_rate_services:
-  fix_comment: SQL syntax error - space in alias name 'AS Total ContractedCost'. Fixed to 'AS TotalContractedCost' without space.
   title: Determine Effective Savings Rate by Service
   slug: effective-savings-rate-services
   date_created: '2024-05-10T19:53:54'
@@ -860,7 +844,7 @@ effective_savings_rate_services:
   sql: |-
     SELECT ProviderName,
            ServiceName,
-           SUM(ContractedCost) AS TotalContractedCost,
+           SUM(ContractedCost) AS Total ContractedCost,
            SUM(EffectiveCost) AS TotalEffectiveCost,
            ((SUM(ContractedCost) - SUM(EffectiveCost)) / SUM(ContractedCost)) AS EffectiveSavingsRate
     FROM focus_data_table
@@ -1028,7 +1012,6 @@ costs_by_availability_zone:
              AvailabilityZone,
              BillingPeriodStart
 daily_anomaly_services:
-  fix_comment: SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart).
   title: Identify anomalous daily spending by subaccount, region, and service
   slug: daily-anomaly-services
   date_created: '2024-05-09T22:50:34'
@@ -1052,14 +1035,13 @@ daily_anomaly_services:
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-    GROUP BY DATE(ChargePeriodStart),
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
              ProviderName,
              SubAccountId,
              RegionId,
              RegionName,
              ServiceName
 daily_anomaly_region:
-  fix_comment: SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart).
   title: Identify anomalous daily spending by subaccount and region
   slug: daily-anomaly-region
   date_created: '2024-05-09T22:48:31'
@@ -1082,13 +1064,12 @@ daily_anomaly_region:
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-    GROUP BY DATE(ChargePeriodStart),
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
              ProviderName,
              SubAccountId,
              RegionId,
              RegionName
 daily_anomaly_subaccount:
-  fix_comment: SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart).
   title: Identify anomalous daily spending by subaccount
   slug: daily-anomaly-subaccount
   date_created: '2024-05-09T22:45:52'
@@ -1109,11 +1090,10 @@ daily_anomaly_subaccount:
     FROM focus_data_table
     WHERE ChargePeriodStart >= ?
       and ChargePeriodEnd < ?
-    GROUP BY DATE(ChargePeriodStart),
+    GROUP BY DATE(ChargePeriodStart) AS StartDay,
              ProviderName,
              SubAccountId
 update_application_budgets:
-  fix_comment: SQL syntax error - missing comma between 'AS Application' and 'SUM(BilledCost)'. Also fixed JSON syntax for DuckDB.
   title: Update budgets for each application
   slug: update-application-budgets
   date_created: '2024-05-09T22:22:45'
@@ -1130,15 +1110,14 @@ update_application_budgets:
     SELECT ProviderName,
            BillingPeriodStart,
            BillingPeriodEnd,
-           Tags->>'Application' AS Application,
-           SUM(BilledCost) AS TotalBilledCost
+           Tags["Application"] AS Application SUM(BilledCost) AS TotalBilledCost
     FROM focus_data_table
     WHERE BillingPeriodStart >= ?
       AND BillingPeriodEnd < ?
     GROUP BY ProviderName,
              BillingPeriodStart,
              BillingPeriodEnd,
-             Tags->>'Application'
+             Tags["Application"]
 update_budgets:
   title: Update budgets with billed costs
   slug: update-budgets
@@ -1224,7 +1203,6 @@ forecast_costs:
              RegionName,
              PricingUnit
 forecast_cashflow:
-  fix_comment: SQL syntax error - missing comma between 'ServiceName' and 'SUM(BilledCost)'.
   title: Forecast cashflow month over month based on historical trends by service
   slug: forecast-cashflow
   date_created: '2024-05-09T21:21:41'
@@ -1241,8 +1219,7 @@ forecast_cashflow:
     SELECT MONTH(BillingPeriodStart),
            ProviderName,
            ServiceCategory,
-           ServiceName,
-           SUM(BilledCost) AS TotalBilledCost
+           ServiceName SUM(BilledCost) AS TotalBilledCost
     FROM focus_data_table
     WHERE BillingPeriodStart >= ?
       AND BillingPeriodEnd < ?
@@ -1425,7 +1402,6 @@ service_costs_subaccount:
     ORDER BY SUM(EffectiveCost) DESC
     LIMIT 10
 identify_unused_commitments:
-  fix_comment: GROUP BY issue - CommitmentDiscountStatus is in SELECT but not in GROUP BY. Added it to GROUP BY clause.
   title: Identify unused commitments
   slug: identify-unused-commitments
   date_created: '2024-05-08T20:23:42'
@@ -1455,10 +1431,8 @@ identify_unused_commitments:
     GROUP BY ProviderName,
              BillingAccountId,
              CommitmentDiscountId,
-             CommitmentDiscountType,
-             CommitmentDiscountStatus
+             CommitmentDiscountType
 allocate_application_multi_currency:
-  fix_comment: DuckDB does not support Tags["ApplicationId"] syntax for JSON field access. Changed to use Tags->>'ApplicationId' which is the correct DuckDB JSON extraction syntax.
   title: Allocate multi-currency charges per application
   slug: allocate-application-multi-currency
   date_created: '2024-05-08T19:52:49'
@@ -1472,7 +1446,7 @@ allocate_application_multi_currency:
   - v1.2
   source_url: https://focus.finops.org/use-case/allocate-application-multi-currency/
   sql: |-
-    SELECT Tags->>'ApplicationId',
+    SELECT Tags["ApplicationId"],
            ProviderName,
            BillingAccountId,
            BillingAccountName,
@@ -1481,7 +1455,7 @@ allocate_application_multi_currency:
     FROM focus_data_table
     WHERE BillingPeriodStart >= ?
       AND BillingPeriodEnd < ?
-    GROUP BY Tags->>'ApplicationId',
+    GROUP BY Tags["ApplicationId"],
              ProviderName,
              BillingAccountId,
              BillingAccountName,
