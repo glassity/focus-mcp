@@ -23,6 +23,7 @@ dev = [
     "mypy>=1.13.0",
     "black>=24.10.0",
     "beautifulsoup4>=4.12.0",
+    "pytest>=8.0.0",
 ]
 
 [build-system]
@@ -36,3 +37,7 @@ packages = ["."]
 dev = [
     "beautifulsoup4>=4.13.5",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
