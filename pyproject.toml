@@ -30,6 +30,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/glassity/focus-mcp"
+Website = "https://glassity.cloud/?utm_source=focus-mcp&utm_medium=pypi"
 Repository = "https://github.com/glassity/focus-mcp"
 Issues = "https://github.com/glassity/focus-mcp/issues"
 

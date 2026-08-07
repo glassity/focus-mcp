@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://glassity.cloud">
+  <a href="https://glassity.cloud/?utm_source=focus-mcp&utm_medium=readme&utm_content=logo">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset=".github/assets/logo-dark-mode.svg">
       <img src=".github/assets/logo-light-mode.svg" alt="Glassity" width="320">
@@ -384,6 +384,6 @@ Apache-2.0. Copyright Glassity. See [LICENSE](LICENSE).
 ---
 
 <p align="center">
-  Built by <a href="https://glassity.cloud">Glassity</a>, cloud cost
+  Built by <a href="https://glassity.cloud/?utm_source=focus-mcp&utm_medium=readme&utm_content=footer">Glassity</a>, cloud cost
   visibility and optimization for AWS.
 </p>
