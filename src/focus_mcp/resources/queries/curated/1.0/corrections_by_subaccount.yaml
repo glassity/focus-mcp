@@ -1,0 +1,23 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report corrections by subaccount for a previously invoiced billing period
+slug: corrections-by-subaccount
+source_url: https://focus.finops.org/use-case/corrections-by-subaccount/
+description: Use FOCUS data to identify refunds across multiple providers, billing accounts, and subaccounts.
+sql: |-
+  SELECT ProviderName,
+         BillingAccountId,
+         ServiceCategory,
+         SubAccountId,
+         SubAccountName,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+    AND ChargeClass = 'Correction'
+  GROUP BY ProviderName,
+           BillingAccountId,
+           SubAccountId,
+           SubAccountName,
+           ServiceCategory

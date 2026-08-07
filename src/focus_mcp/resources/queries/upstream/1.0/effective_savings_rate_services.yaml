@@ -1,0 +1,18 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Determine Effective Savings Rate by Service
+slug: effective-savings-rate-services
+source_url: https://focus.finops.org/use-case/effective-savings-rate-services/
+description: FinOps Practitioners are able to compute in a first step the Contracted Cost from the Contracted Unit Prices and the Quantities in Pricing Unit, and in the second step the ESR, which is (Contracted Cost - Effective Cost) / Contracted Cost.
+sql: |-
+  SELECT ProviderName,
+         ServiceName,
+         SUM(ContractedCost) AS Total ContractedCost,
+         SUM(EffectiveCost) AS TotalEffectiveCost,
+         ((SUM(ContractedCost) - SUM(EffectiveCost)) / SUM(ContractedCost)) AS EffectiveSavingsRate
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+  GROUP BY ProviderName,
+           ServiceName

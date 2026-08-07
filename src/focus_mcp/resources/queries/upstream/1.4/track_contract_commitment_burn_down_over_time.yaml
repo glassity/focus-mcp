@@ -1,0 +1,26 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Track contract commitment burn-down over time
+slug: track-contract-commitment-burn-down-over-time
+source_url: https://focus.finops.org/use-case/track-contract-commitment-burn-down-over-time/
+description: Monitor the consumption of contract commitments across billing periods to track progress toward fulfilling contractual obligations and identify potential under-utilization risks.
+sql: |-
+  SELECT
+    CU.BillingPeriodStart,
+    CU.ServiceProviderName,
+    CU.BillingAccountId,
+    JSON_VALUE(CA, '$.ContractCommitmentID') AS ContractCommitmentId,
+    SUM(CAST(JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') AS FLOAT64)) AS AppliedCost,
+    SUM(CU.EffectiveCost) AS TotalEffectiveCost
+   FROM focus_data_table CU
+   CROSS JOIN
+    UNNEST(JSON_EXTRACT_ARRAY(CU.ContractApplied, '$.Elements')) AS CA
+   WHERE JSON_VALUE(CA, '$.ContractCommitmentID') IS NOT NULL
+    AND BillingPeriodStart >= ? AND BillingPeriodStart < ?
+   GROUP BY
+    CU.BillingPeriodStart,
+    CU.ServiceProviderName,
+    CU.BillingAccountId,
+    JSON_VALUE(CA, '$.ContractCommitmentID')
+   ORDER BY BillingPeriodStart, ContractCommitmentId

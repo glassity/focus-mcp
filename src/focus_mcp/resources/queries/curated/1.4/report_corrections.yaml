@@ -1,0 +1,24 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report corrections for a previously invoiced billing period
+slug: report-corrections-for-a-previously-invoiced-billing-period
+source_url: https://focus.finops.org/use-case/report-corrections-for-a-previously-invoiced-billing-period/
+description: When service providers issue corrections that adjust historical invoices, practitioners must reconcile those adjustments against prior records.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingAccountId,
+    ChargeCategory,
+    ServiceCategory,
+    ServiceName,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+    AND ChargeClass = 'Correction'
+  GROUP BY
+    ServiceProviderName,
+    BillingAccountId,
+    ChargeCategory,
+    ServiceCategory,
+    ServiceName

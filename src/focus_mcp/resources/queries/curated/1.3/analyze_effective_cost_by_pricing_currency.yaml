@@ -1,0 +1,22 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze effective cost by pricing currency
+slug: analyze-effective-cost-by-pricing-currency-2
+source_url: https://focus.finops.org/use-case/analyze-effective-cost-by-pricing-currency-2/
+description: Break down the effective cost by each pricing currency to surface regional price differences and exchange-rate impacts.
+sql: |-
+  SELECT
+      ServiceProviderName,
+      HostProviderName,
+      ServiceName,
+      PricingCurrency,
+      SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+      ServiceProviderName,
+      HostProviderName,
+      ServiceName,
+      PricingCurrency
+divergence_note: Upstream publishes different SQL for 1.3 than for 1.2.

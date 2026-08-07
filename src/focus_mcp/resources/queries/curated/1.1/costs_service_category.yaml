@@ -1,0 +1,21 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report costs by service category
+slug: costs-service-category
+source_url: https://focus.finops.org/use-case/costs-service-category/
+description: Understanding costs across providers, billing periods, and service categories (Analytics, Compute, Database, Storage, etc.) provides valuable insight into total costs.
+sql: |-
+  SELECT ProviderName,
+         BillingCurrency,
+         BillingPeriodStart,
+         ServiceCategory,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    and BillingPeriodEnd <= ?
+  GROUP BY ProviderName,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory
+  ORDER BY TotalBilledCost DESC

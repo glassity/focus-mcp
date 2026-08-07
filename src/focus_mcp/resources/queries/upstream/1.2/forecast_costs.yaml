@@ -1,0 +1,29 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Get historical usage and rates to enable cost forecasting
+slug: forecast-costs
+source_url: https://focus.finops.org/use-case/forecast-costs/
+description: While Finance will look at higher-level forecasting data such as amortized costs and total cashflow, a FinOps Practitioner needs to forecast costs from quantities of priced units and effective costs based on historical rates. Rates can be computed from costs and quantities can be retrieved from FOCUS data. Effective costs are used to account for the costs of commitment purchases. This query extracts cost and usage data by Region. More fine-grain extrapolation could be done based on further dimensions like Tags.
+sql: |-
+  SELECT ProviderName,
+         BillingPeriodStart,
+         BillingPeriodEnd,
+         ServiceCategory,
+         ServiceName,
+         RegionId,
+         RegionName,
+         PricingUnit,
+         SUM(EffectiveCost) AS TotalEffectiveCost,
+         SUM(PricingQuantity) AS TotalPricingQuantity
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd <= ?
+  GROUP BY ProviderName,
+           BillingPeriodStart,
+           BillingPeriodEnd,
+           ServiceCategory,
+           ServiceName,
+           RegionId,
+           RegionName,
+           PricingUnit

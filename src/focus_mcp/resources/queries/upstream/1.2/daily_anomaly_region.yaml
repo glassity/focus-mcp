@@ -1,0 +1,22 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Identify anomalous daily spending by subaccount and region
+slug: daily-anomaly-region
+source_url: https://focus.finops.org/use-case/daily-anomaly-region/
+description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Region-level trends may get hidden when aggregated to a month-level. In this case, we want to monitor cost trends with up-front payments amortized.
+sql: |-
+  SELECT DATE(ChargePeriodStart) AS Day,
+         ProviderName,
+         SubAccountId,
+         RegionId,
+         RegionName,
+         SUM(EffectiveCost) AS DailyEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+  GROUP BY DATE(ChargePeriodStart) AS StartDay,
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName

@@ -13,6 +13,25 @@ from packaging.version import parse
 from .paths import resource_path
 
 
+def _version_key(value):
+    return parse(str(value).replace('-preview', 'a0'))
+
+
+def _available_at(item, version) -> bool:
+    """Whether a column or attribute exists in the given FOCUS version.
+
+    The specification deletes a retired item's file rather than marking it,
+    so the cached metadata records removed_version and both ends of the
+    range are checked. Without the upper bound, 1.4 would still be told it
+    has ProviderName.
+    """
+    introduced = item.get('introduced_version')
+    if not introduced or _version_key(introduced) > _version_key(version):
+        return False
+    removed = item.get('removed_version')
+    return not removed or _version_key(removed) > _version_key(version)
+
+
 class FocusSpecLoader:
     """Loader for FOCUS specification data from YAML files."""
 
@@ -83,7 +102,7 @@ class FocusSpecLoader:
         if version:
             result = [
                 col for col in result
-                if parse(col.get('introduced_version', '0').replace('-preview', 'a0')) <= parse(version.replace('-preview', 'a0'))
+                if _available_at(col, version)
             ]
 
         # Filter by feature level
@@ -130,7 +149,7 @@ class FocusSpecLoader:
         if version:
             result = [
                 attr for attr in result
-                if parse(attr.get('introduced_version', '0').replace('-preview', 'a0')) <= parse(version.replace('-preview', 'a0'))
+                if _available_at(attr, version)
             ]
 
         # Search filter

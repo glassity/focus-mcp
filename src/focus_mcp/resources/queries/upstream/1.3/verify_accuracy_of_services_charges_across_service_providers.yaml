@@ -1,0 +1,23 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Verify accuracy of services charges across service providers
+slug: verify-accuracy-of-services-charges-across-service-providers
+source_url: https://focus.finops.org/use-case/verify-accuracy-of-services-charges-across-service-providers/
+description: In order to verify that the charges found in the FOCUS dataset match those of the service providers' invoices a FinOps Practitioner can aggregate cost data from service providers per service for a billing period and compare it to individual service charges found inside invoices.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingAccountId,
+    BillingAccountName,
+    BillingCurrency,
+    ServiceName,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    BillingAccountName,
+    BillingAccountId,
+    BillingCurrency,
+    ServiceName

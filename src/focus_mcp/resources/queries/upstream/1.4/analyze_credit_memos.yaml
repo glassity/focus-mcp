@@ -1,0 +1,8 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Analyze credit memos
+slug: analyze-credit-memos-2
+source_url: https://focus.finops.org/use-case/analyze-credit-memos-2/
+description: Locate Service Provider-issued credit memos in billing data and analyze how each one reduces net spend.
+sql: "SELECT \n    ServiceProviderName,\n    InvoiceId,\n    SUM(BilledCost) AS TotalBilledCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nAND ChargeCategory = 'Credit'\nGROUP BY\n    ServiceProviderName,\n    InvoiceId"

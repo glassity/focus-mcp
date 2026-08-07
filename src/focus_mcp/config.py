@@ -76,6 +76,6 @@ AWS_REGION = os.getenv("AWS_REGION", os.getenv("AWS_DEFAULT_REGION", "us-east-1"
 
 # FOCUS specification version
 # Determines which queries are available based on their focus_versions field
-# Queries are filtered from the unified YAML file at runtime
+# Queries load from the collection directory for this version
 # This allows supporting multiple FOCUS versions with version-specific query sets
 FOCUS_VERSION = os.getenv("FOCUS_VERSION", "1.0")

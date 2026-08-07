@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze cost per compute service for a subaccount
+slug: cost-compute-subaccount
+source_url: https://focus.finops.org/use-case/cost-compute-subaccount/
+description: Compute spend tends to be the largest component of spend in most cloud bills. Drilling into the resource-level view of cost for a given day can provide a detailed view of the heaviest spending compute resources, including a view of which time periods the consumption was at its highest level.
+sql: |-
+  SELECT
+    Min(ChargePeriodStart),
+    Max(ChargePeriodEnd),
+    ServiceName,
+    ResourceId,
+    ResourceName,
+    SUM(PricingQuantity),
+    SUM(EffectiveCost) AS MonthlyEffectiveCost
+  FROM focus_data_table
+  WHERE SubAccountId = ?
+    AND ServiceCategory = 'Compute'
+    AND ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+    ServiceName,
+    ResourceId,
+    ResourceName
+  ORDER BY MonthlyEffectiveCost DESC

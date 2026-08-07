@@ -1,0 +1,23 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report costs by service category and subcategory
+slug: report-costs-by-service-category-and-subcategory
+source_url: https://focus.finops.org/use-case/report-costs-by-service-category-and-subcategory/
+description: Understanding costs across providers, billing periods, and service categories (Analytics, Compute, Database, Storage, etc.)  and service subcategories (Virtual Machines,Relational Databases, Content Delivery, etc) provides valuable insight into total costs.
+sql: |-
+  SELECT ProviderName,
+         BillingCurrency,
+         BillingPeriodStart,
+         ServiceCategory,
+         ServiceSubcategory,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    and BillingPeriodEnd < ?
+  GROUP BY ProviderName,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory,
+           ServiceSubcategory
+  ORDER BY TotalBilledCost DESC

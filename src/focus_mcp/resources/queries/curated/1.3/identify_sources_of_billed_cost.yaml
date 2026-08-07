@@ -1,0 +1,9 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Identify sources of billed cost
+slug: identify-sources-of-billed-cost-2
+source_url: https://focus.finops.org/use-case/identify-sources-of-billed-cost-2/
+description: Reconcile billing data from Service Providers, Host Providers, and Invoice Issuers to pinpoint true spend and eliminate duplicate charges.
+sql: "SELECT \n    ServiceProviderName,\n    HostProviderName,\n    InvoiceIssuerName,\n    InvoiceId,\n    SUM(BilledCost) AS TotalBilledCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nGROUP BY\n    ServiceProviderName,\n    HostProviderName,\n    InvoiceIssuerName,\n    InvoiceId"
+divergence_note: Upstream corrected this query in 1.3, so the workaround the 1.2 collection carries is not needed here.

@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: GROUP BY issue - ORDER BY references BillingPeriodStart which is not in GROUP BY. Changed to ChargePeriodStart which is in the GROUP BY clause.
+title: Report service costs by providers subaccount
+slug: report-service-costs-by-providers-subaccount
+source_url: https://focus.finops.org/use-case/report-service-costs-by-providers-subaccount/
+description: Organizations wants to negotiate private pricing for a particular workload, a subaccount that carries specialized workloads, or their entire footprint. The cost metric used must amortize up-front and recurring fees to get an accurate view of the effective cost.
+sql: |-
+  SELECT ProviderName,
+         ServiceName,
+         SubAccountId,
+         ChargePeriodStart,
+         SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+    AND SubAccountId = ?
+    AND ProviderName = ?
+  GROUP BY ProviderName,
+           ServiceName,
+           SubAccountId,
+           ChargePeriodStart
+  ORDER BY SUM(EffectiveCost),
+           ChargePeriodStart DESC

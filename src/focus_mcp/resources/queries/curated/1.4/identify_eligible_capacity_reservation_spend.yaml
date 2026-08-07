@@ -1,0 +1,29 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. json_extract_array becomes json_extract(x, '$[*]'). json_extract_array is MySQL-only; DuckDB's json_extract returns a list only when the path selects every element, so [*] is appended for UNNEST. UNNEST(...) AS X aliases the derived table, not the column, so every reference to X returns NULL; AS _u(X) names the column.
+title: Identify Eligible Capacity Reservation Spend
+slug: identify-eligible-capacity-reservation-spend
+source_url: https://focus.finops.org/use-case/identify-eligible-capacity-reservation-spend/
+description: Identifies charges eligible for capacity-reservation commitment programs, distinguishing between used and unused reservations. Capacity reservations secure resource availability rather than provide discounts, and are tracked via CapacityReservationId and CapacityReservationStatus rather than the commitment discount columns. Filters CommitmentProgramEligibilityDetails to rows whose ProgramType values correspond to capacity-reservation programs (e.g., AdvanceResourceCommitment, ZonalResourceCommitment), then uses CapacityReservationId and CapacityReservationStatus to determine reservation utilization.
+sql: |-
+  SELECT
+    CU.ServiceProviderName,
+    CU.ServiceName,
+    JSON_VALUE(CP, '$.ProgramType') AS EligibleProgramType,
+    CU.CapacityReservationStatus,
+    SUM(CU.BilledCost) AS BilledCost,
+    COUNT(*) AS RowCount
+  FROM focus_data_table CU
+  CROSS JOIN
+    UNNEST(json_extract(CU.CommitmentProgramEligibilityDetails, '$.CommitmentPrograms[*]')) AS _u(CP)
+  WHERE CU.ChargePeriodStart >= ? AND CU.ChargePeriodEnd < ?
+    AND CU.ChargeCategory = 'Usage'
+    AND CU.CommitmentProgramEligibilityDetails IS NOT NULL
+    AND JSON_VALUE(CP, '$.ProgramType') IN ('AdvanceResourceCommitment', 'ZonalResourceCommitment')
+  GROUP BY
+    CU.ServiceProviderName,
+    CU.ServiceName,
+    JSON_VALUE(CP, '$.ProgramType'),
+    CU.CapacityReservationStatus
+  ORDER BY BilledCost DESC

@@ -1,0 +1,34 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. json_extract_array becomes json_extract(x, '$[*]'). json_extract_array is MySQL-only; DuckDB's json_extract returns a list only when the path selects every element, so [*] is appended for UNNEST. UNNEST(...) AS X aliases the derived table, not the column, so every reference to X returns NULL; AS _u(X) names the column.
+title: Compare Commitment Opportunities Across Providers (Cross-Provider with SaaS)
+slug: compare-commitment-opportunities-across-providers-cross-provider-with-saas
+source_url: https://focus.finops.org/use-case/compare-commitment-opportunities-across-providers-cross-provider-with-saas/
+description: Aggregates eligible spend and uncovered eligible spend across all providers, including SaaS platforms. A practitioner managing both CSP and SaaS workloads can identify where uncovered eligible spend is concentrated across commitment program types. When a charge is eligible for multiple commitment program types, it appears once per eligible type; removing the EligibleProgramType grouping without deduplicating would inflate totals.
+sql: |-
+  WITH CommitmentDiscountEligible AS (
+    SELECT
+      CU.ServiceProviderName,
+      JSON_VALUE(CP, '$.ProgramType') AS ProgramType,
+      CU.EffectiveCost,
+      -- EffectiveCost = BilledCost for uncovered rows; used here for ratio consistency
+      CASE WHEN CU.CommitmentDiscountId IS NULL THEN CU.EffectiveCost ELSE 0 END AS UncoveredCost
+    FROM focus_data_table CU
+    CROSS JOIN
+      UNNEST(json_extract(CU.CommitmentProgramEligibilityDetails, '$.CommitmentPrograms[*]')) AS _u(CP)
+    WHERE CU.ChargePeriodStart >= ? AND CU.ChargePeriodEnd < ?
+      AND CU.ChargeCategory = 'Usage'
+      AND CU.CommitmentProgramEligibilityDetails IS NOT NULL
+      -- Replace with provider-specific discount-bearing program types
+      AND JSON_VALUE(CP, '$.ProgramType') IN ('FlexibleSpendPlan', 'ResourceReservation')
+  )
+  SELECT
+    ServiceProviderName,
+    ProgramType AS EligibleProgramType,
+    SUM(EffectiveCost) AS EligibleCost,
+    SUM(UncoveredCost) AS UncoveredEligibleCost,
+    SUM(UncoveredCost) / NULLIF(SUM(EffectiveCost), 0) AS UncoveredRate
+  FROM CommitmentDiscountEligible
+  GROUP BY ServiceProviderName, ProgramType
+  ORDER BY UncoveredEligibleCost DESC

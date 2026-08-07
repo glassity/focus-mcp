@@ -1,0 +1,36 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. json_extract_array becomes json_extract(x, '$[*]'). json_extract_array is MySQL-only; DuckDB's json_extract returns a list only when the path selects every element, so [*] is appended for UNNEST. UNNEST(...) AS X aliases the derived table, not the column, so every reference to X returns NULL; AS _u(X) names the column.
+title: Calculate Commitment Discount Coverage Rate with Eligibility-Adjusted Denominator
+slug: calculate-commitment-discount-coverage-rate-with-eligibility-adjusted-denominator
+source_url: https://focus.finops.org/use-case/calculate-commitment-discount-coverage-rate-with-eligibility-adjusted-denominator/
+description: 'Computes a commitment discount coverage rate using only eligible charges as the denominator. Without eligibility data, practitioners typically divide covered spend by total spend, which produces a coverage rate that includes ineligible charges (e.g., storage services, support fees) in the denominator and may not reflect the actionable coverage opportunity. Targets discount-bearing programs only. Note: Unused commitment rows (CommitmentDiscountStatus = &#8216;Unused'') have CommitmentDiscountId populated and will artificially inflate both the numerator and the denominator if left in the dataset; practitioners should additionally filter these out for a true utilization-adjusted rate.'
+sql: |-
+  WITH CommitmentDiscountEligible AS (
+    SELECT
+      CU.ServiceProviderName,
+      CU.EffectiveCost,
+      CU.CommitmentDiscountId
+    FROM focus_data_table CU
+    WHERE CU.ChargePeriodStart >= ? AND CU.ChargePeriodEnd < ?
+      AND CU.ChargeCategory = 'Usage'
+      AND (
+        -- Include covered rows in the denominator
+        CU.CommitmentDiscountId IS NOT NULL
+        -- If uncovered, check if the JSON array contains an eligible program type
+        OR EXISTS (
+          SELECT 1
+          FROM UNNEST(json_extract(CU.CommitmentProgramEligibilityDetails, '$.CommitmentPrograms[*]')) AS _u(CP)
+          WHERE JSON_VALUE(CP, '$.ProgramType') IN ('FlexibleSpendPlan', 'ResourceReservation')
+        )
+      )
+  )
+  SELECT
+    ServiceProviderName,
+    SUM(CASE WHEN CommitmentDiscountId IS NOT NULL THEN EffectiveCost ELSE 0 END) AS CoveredCost,
+    SUM(EffectiveCost) AS EligibleCost,
+    SUM(CASE WHEN CommitmentDiscountId IS NOT NULL THEN EffectiveCost ELSE 0 END)
+      / NULLIF(SUM(EffectiveCost), 0) AS CommitmentCoverageRate
+  FROM CommitmentDiscountEligible
+  GROUP BY ServiceProviderName

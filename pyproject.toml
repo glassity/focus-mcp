@@ -47,6 +47,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/focus_mcp"]
+# The upstream baselines are what CI measures the curated collections
+# against; no runtime code reads them, so shipping them would double the
+# query payload for data no user can reach.
+exclude = ["src/focus_mcp/resources/queries/upstream"]
 
 [tool.hatch.build.targets.sdist]
 include = ["src/", "tests/", "README.md", "LICENSE", "pyproject.toml"]

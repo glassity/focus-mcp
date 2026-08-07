@@ -1,0 +1,28 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Analyze cost by participating entities
+slug: analyze-cost-by-participating-entities
+source_url: https://focus.finops.org/use-case/analyze-cost-by-participating-entities/
+description: Break down costs by service provider, invoice issuer, and host provider to understand the complete value chain and identify reseller margins or marketplace fees.
+sql: |-
+  SELECT
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    ServiceProviderName,
+    InvoiceIssuerName,
+    HostProviderName,
+    ServiceName,
+    BillingCurrency,
+    SUM(BilledCost) AS TotalBilledCost
+   FROM focus_data_table
+   WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+   GROUP BY
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    ServiceProviderName,
+    InvoiceIssuerName,
+    HostProviderName,
+    ServiceName,
+    BillingCurrency
+   ORDER BY TotalBilledCost DESC

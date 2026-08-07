@@ -1,0 +1,24 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. json_extract_array becomes json_extract(x, '$[*]'). json_extract_array is MySQL-only; DuckDB's json_extract returns a list only when the path selects every element, so [*] is appended for UNNEST. FLOAT64 is a BigQuery type; DOUBLE is the DuckDB equivalent. UNNEST(...) AS X aliases the derived table, not the column, so every reference to X returns NULL; AS _u(X) names the column.
+title: Report on initial contract commitments
+slug: report-on-initial-contract-commitments
+source_url: https://focus.finops.org/use-case/report-on-initial-contract-commitments/
+description: Aggregate initial contract commitment purchases to understand total contracted spend and usage commitments by service provider and commitment ID over a specified time range.
+sql: |-
+  SELECT
+    MIN(CU.ChargePeriodStart) AS ChargePeriodStart,
+    MAX(CU.ChargePeriodEnd) AS ChargePeriodEnd,
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID') AS ContractCommitmentId,
+    SUM(CAST(JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') AS DOUBLE)) AS ContractCommitmentAppliedCost
+   FROM focus_data_table CU
+   CROSS JOIN
+    UNNEST(json_extract(CU.ContractApplied, '$.Elements[*]')) AS _u(CA)
+   WHERE JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') IS NOT NULL
+    AND ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+    AND ChargeCategory = 'Purchase'
+   GROUP BY
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID')

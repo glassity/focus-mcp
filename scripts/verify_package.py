@@ -35,10 +35,17 @@ from pathlib import Path
 REQUIRED_MEMBERS = [
     "focus_mcp/server.py",
     "focus_mcp/paths.py",
-    "focus_mcp/resources/queries/focus_use_cases.yaml",
     "focus_mcp/resources/specifications/columns.yaml",
     "focus_mcp/resources/specifications/attributes.yaml",
 ]
+
+# Query collections are directories of files rather than one named file, so
+# the wheel is checked for a populated collection instead of a fixed path.
+# Only curated/ ships: upstream/ is the baseline CI compares against and no
+# runtime code reads it, so packaging it would double the payload for data
+# no user can reach.
+REQUIRED_PREFIXES = ["focus_mcp/resources/queries/curated/"]
+FORBIDDEN_PREFIXES = ["focus_mcp/resources/queries/upstream/"]
 
 EXPECTED_TOOLS = {
     "execute_query",
@@ -74,6 +81,19 @@ def check_wheel_contents(wheel: Path) -> None:
     missing = [member for member in REQUIRED_MEMBERS if member not in names]
     if missing:
         raise SystemExit(f"wheel is missing packaged files: {missing}")
+
+    empty = [
+        prefix
+        for prefix in REQUIRED_PREFIXES
+        if not any(name.startswith(prefix) and name.endswith(".yaml") for name in names)
+    ]
+    if empty:
+        raise SystemExit(f"wheel carries no query files under: {empty}")
+
+    shipped = [p for p in FORBIDDEN_PREFIXES
+               if any(name.startswith(p) for name in names)]
+    if shipped:
+        raise SystemExit(f"wheel should not carry: {shipped}")
 
     print(f"wheel contents OK ({len(names)} members)")
 

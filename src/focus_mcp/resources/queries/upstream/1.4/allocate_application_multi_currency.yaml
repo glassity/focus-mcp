@@ -1,0 +1,8 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Allocate multi-currency charges per application
+slug: allocate-multi-currency-charges-per-application-2
+source_url: https://focus.finops.org/use-case/allocate-multi-currency-charges-per-application-2/
+description: Finance needs to allocate costs and perform chargeback for charges for all applications that come from different geographic locations and are in different currencies.
+sql: "SELECT \n  Tags[\"ApplicationId\"],\n  ServiceProviderName,\n  BillingAccountId,\n  BillingAccountName,\n  BillingCurrency,\n  SUM(BilledCost) AS TotalBilledCost\nFROM focus_data_table\nWHERE\n  BillingPeriodStart >= ? AND BillingPeriodEnd < ?\nGROUP BY\n  Tags[\"ApplicationId\"],\n  ServiceProviderName,\n  BillingAccountId,\n  BillingAccountName,\n  BillingCurrency"

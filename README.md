@@ -19,6 +19,8 @@
   <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.0-36%20queries-blue.svg" alt="FOCUS v1.0: 36 queries"></a>
   <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.1-41%20queries-green.svg" alt="FOCUS v1.1: 41 queries"></a>
   <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.2-53%20queries-orange.svg" alt="FOCUS v1.2: 53 queries"></a>
+  <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.3-58%20queries-yellow.svg" alt="FOCUS v1.3: 58 queries"></a>
+  <a href="https://focus.finops.org/"><img src="https://img.shields.io/badge/FOCUS%20v1.4-66%20queries-red.svg" alt="FOCUS v1.4: 66 queries"></a>
 </p>
 
 # FOCUS MCP Server
@@ -35,9 +37,10 @@ one-line prompts instead of hand-written SQL:
 
 Under the hood, [DuckDB](https://duckdb.org/) queries your Parquet exports
 directly, whether they sit on local disk, S3, or GCS. There is no data
-warehouse to stand up. The server bundles 130 queries curated from the
-official FOCUS use-case catalog (36 for v1.0, 41 for v1.1, 53 for v1.2), and
-each query cites the page it came from.
+warehouse to stand up. The server bundles 254 queries curated from the
+official FOCUS use-case catalog, as a separate collection per specification
+version (36 for v1.0, 41 for v1.1, 53 for v1.2, 58 for v1.3, 66 for v1.4),
+and each query cites the page it came from.
 
 ## What is FOCUS?
 
@@ -298,7 +301,7 @@ inside the server process and are never exposed to MCP clients.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FOCUS_DATA_LOCATION` | `data/focus-export` | Where the Parquet lives: a local path, `s3://…`, or `gs://…` |
-| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, or `1.2` |
+| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, `1.2`, `1.3` or `1.4`. Selects which query collection loads |
 | `AWS_REGION` | `us-east-1` | Region for S3 access |
 | `AWS_PROFILE` | (unset) | AWS profile for S3 authentication |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | (unset) | Static AWS credentials, if not using a role or profile |

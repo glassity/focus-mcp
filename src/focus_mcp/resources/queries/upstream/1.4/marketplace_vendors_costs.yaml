@@ -1,0 +1,25 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Analyze marketplace vendors costs
+slug: analyze-marketplace-vendors-costs
+source_url: https://focus.finops.org/use-case/analyze-marketplace-vendors-costs/
+description: 'FinOps Practitioners want to be able to answer the question: How much are we spending each month on vendor products that were purchased via a Cloud Service Provider''s marketplace?'
+sql: |-
+  SELECT
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    ServiceProviderName,
+    HostProviderName,
+    InvoiceIssuerName,
+    ROUND(SUM(EffectiveCost),2) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+    AND InvoiceIssuerName != ServiceProviderName
+  GROUP BY
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    ServiceProviderName,
+    HostProviderName,
+    InvoiceIssuerName
+  ORDER BY TotalEffectiveCost ASC

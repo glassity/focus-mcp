@@ -1,0 +1,23 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report corrections for a previously invoiced billing period
+slug: report-corrections
+source_url: https://focus.finops.org/use-case/report-corrections/
+description: FinOps Practitioners need to identity all refunds within a billing period.
+sql: |-
+  SELECT ProviderName,
+         BillingAccountId,
+         ChargeCategory,
+         ServiceCategory,
+         ServiceName,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+    AND ChargeClass = 'Correction'
+  GROUP BY ProviderName,
+           BillingAccountId,
+           ChargeCategory,
+           ServiceCategory,
+           ServiceName

@@ -1,0 +1,32 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze resource costs by SKU
+slug: analyze-resource-costs-by-sku
+source_url: https://focus.finops.org/use-case/analyze-resource-costs-by-sku/
+description: 'Understanding the highest costing SKUs can help multiple personas in an organization achieve goals, such as: Contract negotiation: Procurement teams can use this information to negotiate the best possible discounts with cloud providers. SKU-based forecasting: Product and Finance teams can use this information to forecast future demand for SKUs and plan accordingly. High unit-cost cleanup: FinOps teams can use this information to identify and prioritize SKUs with high unit costs, which can be optimized or eliminated to reduce overall cloud spend.'
+sql: |-
+  SELECT
+    ServiceProviderName,
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    SkuId,
+    SkuPriceId,
+    PricingUnit,
+    ListUnitPrice,
+    SUM(PricingQuantity) AS TotalPricingQuantity,
+    SUM(ListCost) AS TotalListCost,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+    ServiceProviderName,
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    SkuId,
+    SkuPriceId,
+    PricingUnit,
+    ListUnitPrice
+  ORDER BY
+    ChargePeriodStart ASC
+  LIMIT 100

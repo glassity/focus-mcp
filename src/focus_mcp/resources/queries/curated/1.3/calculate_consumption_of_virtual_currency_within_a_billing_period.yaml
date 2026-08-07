@@ -1,0 +1,8 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Calculate consumption of virtual currency within a billing period
+slug: calculate-consumption-of-virtual-currency-within-a-billing-period-2
+source_url: https://focus.finops.org/use-case/calculate-consumption-of-virtual-currency-within-a-billing-period-2/
+description: Track virtual-currency burn throughout the billing period to forecast exhaustion dates and stay within budget.
+sql: "SELECT \n    ServiceProviderName,\n    SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nAND PricingCurrency = ?\nAND ChargeCategory = 'Usage'\nGROUP BY\n    ServiceProviderName\nORDER BY TotalPricingCurrencyEffectiveCost DESC\nLIMIT 10"

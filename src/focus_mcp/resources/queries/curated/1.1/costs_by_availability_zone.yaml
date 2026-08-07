@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze costs by availability zone for a subaccount
+slug: costs-by-availability-zone
+source_url: https://focus.finops.org/use-case/costs-by-availability-zone/
+description: "It is good practice for Engineering to monitor cost and usage of services by availability zone for all regions to:  \nA) ensure there isn't any cost/usage occuring outside of the expected locations, and \nB) to ensure your costs are spread according to an expected ratio"
+sql: |-
+  SELECT ProviderName,
+         RegionName,
+         AvailabilityZone,
+         BillingPeriodStart,
+         SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE SubAccountId = ?
+    AND ChargePeriodStart >= ?
+    AND ChargePeriodEnd < ?
+  GROUP BY ProviderName,
+           RegionName,
+           AvailabilityZone,
+           BillingPeriodStart
+  ORDER BY ProviderName,
+           RegionName,
+           AvailabilityZone,
+           BillingPeriodStart

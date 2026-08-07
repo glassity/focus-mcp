@@ -1,0 +1,23 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report on initial contract commitments
+slug: report-on-initial-contract-commitments
+source_url: https://focus.finops.org/use-case/report-on-initial-contract-commitments/
+description: Aggregate initial contract commitment purchases to understand total contracted spend and usage commitments by service provider and commitment ID over a specified time range.
+sql: |-
+  SELECT
+    MIN(CU.ChargePeriodStart) AS ChargePeriodStart,
+    MAX(CU.ChargePeriodEnd) AS ChargePeriodEnd,
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID') AS ContractCommitmentId,
+    SUM(CAST(JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') AS FLOAT64)) AS ContractCommitmentAppliedCost
+   FROM focus_data_table CU
+   CROSS JOIN
+    UNNEST(JSON_EXTRACT_ARRAY(CU.ContractApplied, '$.Elements')) AS CA
+   WHERE JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') IS NOT NULL
+    AND ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+    AND ChargeCategory = 'Purchase'
+   GROUP BY
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID')
