@@ -28,6 +28,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 from pathlib import Path
 
@@ -116,32 +117,18 @@ async def handshake(script: Path, cwd: Path) -> None:
 
 
 def check_stdout_purity(script: Path, cwd: Path) -> None:
-    """Prove the console script never writes anything but JSON-RPC to stdout.
+    """Prove the console script writes nothing but JSON-RPC to stdout.
 
-    The handshake() check above goes through the Python `mcp` client, which
-    silently skips any line it cannot parse as JSON-RPC. That leniency is a
-    property of that one client, not of the protocol, so handshake() would
-    stay green even if a print() statement snuck a human-readable line into
-    stdout. This check bypasses the client and inspects the raw byte stream
-    instead.
+    The spec is explicit: a stdio server MUST NOT write anything to stdout
+    that is not a valid MCP message. handshake() cannot catch a violation
+    because the Python `mcp` client silently skips lines it cannot parse, so
+    this drives the exchange by hand and reads the raw stream.
 
-    It drives the same minimal exchange by hand - initialize, then the
-    notifications/initialized notification, then a tools/call for
-    list_columns - and reads stdout in full once the process exits. The
-    list_columns call matters here specifically because it is what triggers
-    the lazy get_spec_loader() path inside the server: a check that only
-    covered startup would miss a print() reintroduced mid-session, which is
-    the more dangerous case since it can desynchronise an already-running
-    client.
-
-    PYTHONUNBUFFERED=1 is set for the child on purpose: a stray print() left
-    on stdout sits in Python's block-buffered stdout until enough output
-    accumulates or the interpreter flushes it, and this process does not
-    reliably flush its default stdout on exit (it is double-wrapped by the
-    stdio transport's own TextIOWrapper around the same fd, and only that
-    wrapper gets flushed). Confirmed empirically: without this flag a single
-    reverted print() vanished without a trace on both streams, which would
-    have made this check pass over the exact regression it exists to catch.
+    The tools/call for list_columns triggers the server's lazy
+    get_spec_loader() path, where a stray print() would land mid-session.
+    PYTHONUNBUFFERED=1 is required: without it a stray print() sits in block
+    buffering and disappears at exit, hiding the regression this exists to
+    catch.
     """
     env = dict(os.environ)
     env["FOCUS_DATA_LOCATION"] = str(cwd / "no-such-data")
@@ -177,13 +164,49 @@ def check_stdout_purity(script: Path, cwd: Path) -> None:
         cwd=str(cwd),
         env=env,
     )
+
+    # Closing stdin is how a client signals shutdown, so it has to wait until
+    # the tools/call reply arrives; communicate() would send both at once and
+    # the server can exit before flushing the reply.
+    collected: list[str] = []
+    reply_seen = threading.Event()
+
+    def drain_stdout() -> None:
+        for line in proc.stdout:
+            collected.append(line)
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict) and parsed.get("id") == 2:
+                reply_seen.set()
+
+    reader = threading.Thread(target=drain_stdout, daemon=True)
+    reader.start()
+
+    proc.stdin.write(stdin_text)
+    proc.stdin.flush()
+    got_reply = reply_seen.wait(timeout=60)
+
     try:
-        stdout, stderr = proc.communicate(input=stdin_text, timeout=30)
+        proc.stdin.close()
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
         proc.kill()
-        stdout, stderr = proc.communicate()
+        proc.wait()
+    reader.join(timeout=10)
+
+    stdout = "".join(collected)
+    stderr = proc.stderr.read()
+
+    if not got_reply:
         raise SystemExit(
-            f"raw MCP exchange timed out waiting for the server to exit; stderr:\n{stderr}"
+            "raw MCP exchange never produced a list_columns reply within 60s, so this "
+            f"check did not exercise the mid-session get_spec_loader() path; "
+            f"exit code {proc.returncode}, stdout:\n{stdout}\nstderr:\n{stderr}"
         )
 
     lines = [line for line in stdout.splitlines() if line.strip()]
