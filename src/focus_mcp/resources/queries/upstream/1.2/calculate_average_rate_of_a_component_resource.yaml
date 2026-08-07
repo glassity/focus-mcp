@@ -1,0 +1,27 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Calculate average rate of a component resource
+slug: calculate-average-rate-of-a-component-resource
+source_url: https://focus.finops.org/use-case/calculate-average-rate-of-a-component-resource/
+description: Aggregate usage and pricing across multiple SKUs to compute the average cost per core for each virtual machine series by region. This common denominator supports benchmarking when billed and consumed units differ.
+sql: |-
+  SELECT ProviderName,
+         ServiceName,
+         PricingUnit,
+         RegionName,
+         JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+         SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount,
+         CASE
+             WHEN SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) > 0 THEN SUM(EffectiveCost) / SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED))
+             ELSE NULL
+         END AS AverageEffectiveCoreCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
+  GROUP BY ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           InstanceSeries

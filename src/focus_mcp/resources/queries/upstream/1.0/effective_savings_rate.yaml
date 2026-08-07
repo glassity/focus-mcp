@@ -1,0 +1,22 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Determine Effective Savings Rate
+slug: effective-savings-rate
+source_url: https://focus.finops.org/use-case/effective-savings-rate/
+description: |-
+  The Effective Savings Rate is a KPI to track the efficiency of using commitment-based discounts.
+
+  The KPI calculation is (Contracted Cost - Effective Cost) / Contracted Cost.
+
+  The Contracted Cost can be computed from the Contracted Unit Price and the Quantity in Pricing Unit.
+
+  Outcome: FinOps Practitioners are able to compute in a first step the Contracted Cost from the Contracted Unit Prices and the Quantities in Pricing Unit, and in the second step the ESR, which is (Contracted Cost - Effective Cost) / Contracted Cost.
+sql: |-
+  SELECT ProviderName,
+         EffectiveCost,
+         ((ListCost - EffectiveCost) / ListCost) AS ESROverList,
+         ((ContractedCost - EffectiveCost) / ContractedUnitPrice) AS ESROverContract
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?

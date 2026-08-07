@@ -1,0 +1,21 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report subaccounts by region
+slug: report-subaccounts-by-region
+source_url: https://focus.finops.org/use-case/report-subaccounts-by-region/
+description: FinOps Practitioners must identify if there are any data residency/ localization/ sovereignty inconsistencies. In order to identify any potential anomalies, they would like to see if the resource being billed for exists in the same geography as the primary payer account. If they do not exist in the same geography, the team would like it flagged for analysis.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    SubAccountId,
+    RegionId,
+    RegionName,
+    COUNT(1)
+  FROM focus_data_table
+  WHERE ChargePeriodStart  >= ? AND ChargePeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    SubAccountId,
+    RegionId,
+    RegionName

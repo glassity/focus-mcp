@@ -1,6 +1,6 @@
 - display_name: Availability Zone
   column_id: AvailabilityZone
-  description: A provider-assigned identifier for a physically separated and isolated area within a Region that provides high availability and fault tolerance.
+  description: A host-provider-assigned identifier for a physically separated and isolated area within a Region that provides high availability and fault tolerance.
   column_type: Dimension
   feature_level: Recommended
   allows_nulls: 'True'
@@ -9,7 +9,7 @@
   introduced_version: '0.5'
 - display_name: Billed Cost
   column_id: BilledCost
-  description: A *charge* serving as the basis for invoicing, inclusive of all reduced rates and discounts while excluding the *amortization* of upfront *charges* (one-time or recurring).
+  description: Cost of a *charge* as invoiced by the [*invoice issuer*](#glossary:invoice-issuer) in a given *billing period*.
   column_type: Metric
   feature_level: Mandatory
   allows_nulls: 'False'
@@ -18,7 +18,7 @@
   introduced_version: '0.5'
 - display_name: Billing Account ID
   column_id: BillingAccountId
-  description: The identifier assigned to a *billing account* by the provider.
+  description: The identifier assigned to a *billing account* by the invoice issuer.
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'False'
@@ -34,15 +34,6 @@
   data_type: String
   value_format: \<not specified>
   introduced_version: '0.5'
-- display_name: Billing Account Type
-  column_id: BillingAccountType
-  description: A provider-assigned name to identify the type of *billing account*.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'False'
-  data_type: String
-  value_format: \<not specified>
-  introduced_version: '1.2'
 - display_name: Billing Currency
   column_id: BillingCurrency
   description: Represents the currency that a *charge* was billed in.
@@ -70,24 +61,6 @@
   data_type: Date/Time
   value_format: Date/Time Format
   introduced_version: '0.5'
-- display_name: Capacity Reservation ID
-  column_id: CapacityReservationId
-  description: The identifier assigned to a *capacity reservation* by the provider.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: \<not specified>
-  introduced_version: '1.1'
-- display_name: Capacity Reservation Status
-  column_id: CapacityReservationStatus
-  description: Indicates whether the *charge* represents either the consumption of a *capacity reservation* or when a *capacity reservation* is unused.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: Allowed Values
-  introduced_version: '1.1'
 - display_name: Charge Category
   column_id: ChargeCategory
   description: Represents the highest-level classification of a *charge* based on the nature of how it is billed.
@@ -99,7 +72,7 @@
   introduced_version: '0.5'
 - display_name: Charge Class
   column_id: ChargeClass
-  description: Indicates whether the *row* represents a correction to a previously invoiced *billing period*.
+  description: Indicates whether a *charge* represents a correction to a previously *closed billing period*.
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'True'
@@ -149,11 +122,11 @@
   feature_level: Conditional
   allows_nulls: 'True'
   data_type: String
-  value_format: Allowed Values
+  value_format: Allowed values
   introduced_version: 1.0-preview
 - display_name: Commitment Discount ID
   column_id: CommitmentDiscountId
-  description: The identifier assigned to a *commitment discount* by the provider.
+  description: The identifier assigned to a *commitment discount* by the service provider.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -169,15 +142,6 @@
   data_type: String
   value_format: \<not specified>
   introduced_version: 1.0-preview
-- display_name: Commitment Discount Quantity
-  column_id: CommitmentDiscountQuantity
-  description: The amount of a *commitment discount* purchased or accounted for in *commitment discount* related *rows* that is denominated in Commitment Discount Units.
-  column_type: Metric
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: Decimal
-  value_format: Numeric Format
-  introduced_version: '1.1'
 - display_name: Commitment Discount Status
   column_id: CommitmentDiscountStatus
   description: Indicates whether the *charge* corresponds with the consumption of a *commitment discount* or the unused portion of the committed amount.
@@ -185,26 +149,17 @@
   feature_level: Conditional
   allows_nulls: 'True'
   data_type: String
-  value_format: Allowed Values
+  value_format: Allowed values
   introduced_version: '1.0'
 - display_name: Commitment Discount Type
   column_id: CommitmentDiscountType
-  description: A provider-assigned identifier for the type of *commitment discount* applied to the *row*.
+  description: A service-provider-assigned identifier for the type of *commitment discount* applied to the *row*.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
   data_type: String
   value_format: \<not specified>
   introduced_version: 1.0-preview
-- display_name: Commitment Discount Unit
-  column_id: CommitmentDiscountUnit
-  description: The provider-specified measurement unit indicating how a provider measures the Commitment Discount Quantity of a *commitment discount*.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: Unit Format
-  introduced_version: '1.1'
 - display_name: Consumed Quantity
   column_id: ConsumedQuantity
   description: The volume of a metered SKU associated with a *resource* or *service* used, based on the Consumed Unit.
@@ -216,7 +171,7 @@
   introduced_version: '1.0'
 - display_name: Consumed Unit
   column_id: ConsumedUnit
-  description: Provider-specified measurement unit indicating how a provider measures usage of a metered SKU associated with a *resource* or *service*.
+  description: Service-provider-specified measurement unit indicating how a service provider measures usage of a metered SKU associated with a *resource* or *service*.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -243,23 +198,14 @@
   introduced_version: '1.0'
 - display_name: Effective Cost
   column_id: EffectiveCost
-  description: The *amortized* cost of the *charge* after applying all reduced rates, discounts, and the applicable portion of relevant, prepaid purchases (one-time or recurring) that covered this *charge*.
+  description: Cost of a *charge* based on the *resources* used, *services* used, or *contract commitments* recognized in a given *charge period*.
   column_type: Metric
   feature_level: Mandatory
   allows_nulls: 'False'
   data_type: Decimal
   value_format: Numeric Format
   introduced_version: '0.5'
-- display_name: Invoice ID
-  column_id: InvoiceId
-  description: The provider-assigned identifier for an invoice encapsulating some or all *charges* in the corresponding billing period for a given billing account.
-  column_type: Dimension
-  feature_level: Recommended
-  allows_nulls: 'True'
-  data_type: String
-  value_format: \<not specified>
-  introduced_version: '1.2'
-- display_name: Invoice Issuer
+- display_name: Invoice Issuer Name
   column_id: InvoiceIssuerName
   description: The name of the entity responsible for invoicing for the *resources* or *services* consumed.
   column_type: Dimension
@@ -279,7 +225,7 @@
   introduced_version: 1.0-preview
 - display_name: List Unit Price
   column_id: ListUnitPrice
-  description: The suggested provider-published unit price for a single Pricing Unit of the associated SKU, exclusive of any discounts.
+  description: The suggested service-provider-published unit price for a single Pricing Unit of the associated SKU, exclusive of any discounts.
   column_type: Metric
   feature_level: Conditional
   allows_nulls: 'True'
@@ -295,42 +241,6 @@
   data_type: String
   value_format: Allowed values
   introduced_version: 1.0-preview
-- display_name: Pricing Currency
-  column_id: PricingCurrency
-  description: The national or virtual currency denomination that a *resource* or *service* was priced in.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: Currency Format
-  introduced_version: '1.2'
-- display_name: Pricing Currency Contracted Unit Price
-  column_id: PricingCurrencyContractedUnitPrice
-  description: The agreed-upon unit price for a single Pricing Unit of the associated SKU, inclusive of *negotiated discounts*, if present, while excluding negotiated *commitment discounts* or any other discounts, and expressed in Pricing Currency.
-  column_type: Metric
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: Decimal
-  value_format: Numeric Format
-  introduced_version: '1.2'
-- display_name: Pricing Currency Effective Cost
-  column_id: PricingCurrencyEffectiveCost
-  description: The cost of the *charge* after applying all reduced rates, discounts, and the applicable portion of relevant, prepaid purchases (one-time or recurring) that covered this *charge*, as denominated in Pricing Currency.
-  column_type: Metric
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: Decimal
-  value_format: Numeric Format
-  introduced_version: '1.2'
-- display_name: Pricing Currency List Unit Price
-  column_id: PricingCurrencyListUnitPrice
-  description: The suggested provider-published unit price for a single Pricing Unit of the associated *SKU*, exclusive of any discounts and expressed in Pricing Currency.
-  column_type: Metric
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: Decimal
-  value_format: Numeric Format
-  introduced_version: '1.2'
 - display_name: Pricing Quantity
   column_id: PricingQuantity
   description: The volume of a given *SKU* associated with a *resource* or *service* used or purchased, based on the Pricing Unit.
@@ -342,14 +252,14 @@
   introduced_version: 1.0-preview
 - display_name: Pricing Unit
   column_id: PricingUnit
-  description: Provider-specified measurement unit for determining unit prices, indicating how the provider rates measured usage and purchase quantities after applying pricing rules like *block pricing*.
+  description: Service-provider-specified measurement unit for determining unit prices, indicating how the service provider rates measured usage and purchase quantities after applying pricing rules like *block pricing*.
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'True'
   data_type: String
   value_format: Unit Format
   introduced_version: 1.0-preview
-- display_name: Provider
+- display_name: Provider - DEPRECATED
   column_id: ProviderName
   description: The name of the entity that made the *resources* or *services* available for purchase.
   column_type: Dimension
@@ -358,7 +268,8 @@
   data_type: String
   value_format: \<not specified>
   introduced_version: '0.5'
-- display_name: Publisher
+  removed_version: '1.4'
+- display_name: Publisher - DEPRECATED
   column_id: PublisherName
   description: The name of the entity that produced the *resources* or *services* that were purchased.
   column_type: Dimension
@@ -367,9 +278,10 @@
   data_type: String
   value_format: \<not specified>
   introduced_version: '0.5'
+  removed_version: '1.4'
 - display_name: Region ID
   column_id: RegionId
-  description: Provider-assigned identifier for an isolated geographic area where a *resource* is provisioned or a *service* is provided.
+  description: Host-provider-assigned identifier for an isolated geographic area where a *resource* is provisioned or a *service* is provided.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -387,7 +299,7 @@
   introduced_version: '1.0'
 - display_name: Resource ID
   column_id: ResourceId
-  description: Identifier assigned to a *resource* by the provider.
+  description: Identifier assigned to a *resource* by the service provider.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -419,56 +331,29 @@
   feature_level: Mandatory
   allows_nulls: 'False'
   data_type: String
-  value_format: Allowed Values
+  value_format: Allowed values
   introduced_version: '0.5'
 - display_name: Service Name
   column_id: ServiceName
-  description: An offering that can be purchased from a provider (e.g., cloud virtual machine, SaaS database, professional *services* from a systems integrator).
+  description: An offering that can be purchased from a service provider (e.g., cloud virtual machine, SaaS database, professional *services* from a systems integrator).
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'False'
   data_type: String
   value_format: \<not specified>
   introduced_version: '0.5'
-- display_name: Service Subcategory
-  column_id: ServiceSubcategory
-  description: Secondary classification of the Service Category for a *service* based on its core function.
-  column_type: Dimension
-  feature_level: Recommended
-  allows_nulls: 'False'
-  data_type: String
-  value_format: Allowed Values
-  introduced_version: '1.1'
 - display_name: SKU ID
   column_id: SkuId
-  description: Provider-specified unique identifier that represents a specific *SKU* (e.g., a quantifiable good or service offering).
+  description: Service-provider-specified unique identifier that represents a specific *SKU* (e.g., a quantifiable good or service offering).
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
   data_type: String
   value_format: \<not specified>
   introduced_version: 1.0-preview
-- display_name: SKU Meter
-  column_id: SkuMeter
-  description: Describes the functionality being metered or measured by a particular SKU in a *charge*.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: \<not specified>
-  introduced_version: '1.1'
-- display_name: SKU Price Details
-  column_id: SkuPriceDetails
-  description: A set of properties of a SKU Price ID which are meaningful and common to all instances of that SKU Price ID.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: JSON
-  value_format: KeyValueFormat
-  introduced_version: '1.1'
 - display_name: SKU Price ID
   column_id: SkuPriceId
-  description: A provider-specified unique identifier that represents a specific *SKU Price* associated with a *resource* or *service* used or purchased.
+  description: A service-provider-specified unique identifier that represents a specific *SKU Price* associated with a *resource* or *service* used or purchased.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -493,15 +378,6 @@
   data_type: String
   value_format: \<not specified>
   introduced_version: '0.5'
-- display_name: Sub Account Type
-  column_id: SubAccountType
-  description: A provider-assigned name to identify the type of *sub account*.
-  column_type: Dimension
-  feature_level: Conditional
-  allows_nulls: 'True'
-  data_type: String
-  value_format: \<not specified>
-  introduced_version: '1.2'
 - display_name: Tags
   column_id: Tags
   description: The set of tags assigned to *tag sources* that account for potential provider-defined or user-defined tag evaluations.
@@ -511,3 +387,219 @@
   data_type: JSON
   value_format: Key-Value Format
   introduced_version: 1.0-preview
+- display_name: Capacity Reservation ID
+  column_id: CapacityReservationId
+  description: The identifier assigned to a *capacity reservation* by the service provider.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.1'
+- display_name: Capacity Reservation Status
+  column_id: CapacityReservationStatus
+  description: Indicates whether the *charge* represents either the consumption of a *capacity reservation* or when a *capacity reservation* is unused.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: Allowed values
+  introduced_version: '1.1'
+- display_name: Commitment Discount Quantity
+  column_id: CommitmentDiscountQuantity
+  description: The amount of a *commitment discount* purchased or accounted for in *commitment discount* related *rows* that is denominated in Commitment Discount Units.
+  column_type: Metric
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: Decimal
+  value_format: Numeric Format
+  introduced_version: '1.1'
+- display_name: Commitment Discount Unit
+  column_id: CommitmentDiscountUnit
+  description: The service-provider-specified measurement unit indicating how a service provider measures the Commitment Discount Quantity of a *commitment discount*.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: Unit Format
+  introduced_version: '1.1'
+- display_name: Service Subcategory
+  column_id: ServiceSubcategory
+  description: Secondary classification of the Service Category for a *service* based on its core function.
+  column_type: Dimension
+  feature_level: Recommended
+  allows_nulls: 'False'
+  data_type: String
+  value_format: Allowed values
+  introduced_version: '1.1'
+- display_name: SKU Meter
+  column_id: SkuMeter
+  description: Describes the functionality being metered or measured by a particular SKU in a *charge*.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.1'
+- display_name: SKU Price Details
+  column_id: SkuPriceDetails
+  description: A set of properties of a SKU Price ID which are meaningful and common to all instances of that SKU Price ID.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: JSON
+  value_format: Key-Value Format
+  introduced_version: '1.1'
+- display_name: Billing Account Type
+  column_id: BillingAccountType
+  description: An invoice-issuer-assigned name to identify the type of *billing account*.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'False'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.2'
+- display_name: Invoice ID
+  column_id: InvoiceId
+  description: The invoice-issuer-assigned identifier for an invoice encapsulating *charges* in the corresponding billing period for a given billing account.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.2'
+- display_name: Pricing Currency
+  column_id: PricingCurrency
+  description: The *national* or *virtual currency* denomination that a *resource* or *service* was priced in.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'False'
+  data_type: String
+  value_format: Currency Format
+  introduced_version: '1.2'
+- display_name: Pricing Currency Contracted Unit Price
+  column_id: PricingCurrencyContractedUnitPrice
+  description: The agreed-upon unit price for a single Pricing Unit of the associated SKU, inclusive of *negotiated discounts*, if present, while excluding negotiated *commitment discounts* or any other discounts, and expressed in Pricing Currency.
+  column_type: Metric
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: Decimal
+  value_format: Numeric Format
+  introduced_version: '1.2'
+- display_name: Pricing Currency Effective Cost
+  column_id: PricingCurrencyEffectiveCost
+  description: The PricingCurrency-denominated equivalent of Effective Cost, representing the cost of a *charge* based on the *resources* used, *services* used, or *contract commitments* recognized in a given *charge period*.
+  column_type: Metric
+  feature_level: Conditional
+  allows_nulls: 'False'
+  data_type: Decimal
+  value_format: Numeric Format
+  introduced_version: '1.2'
+- display_name: Pricing Currency List Unit Price
+  column_id: PricingCurrencyListUnitPrice
+  description: The suggested service-provider-published unit price for a single Pricing Unit of the associated *SKU*, exclusive of any discounts and expressed in Pricing Currency.
+  column_type: Metric
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: Decimal
+  value_format: Numeric Format
+  introduced_version: '1.2'
+- display_name: Sub Account Type
+  column_id: SubAccountType
+  description: A service-provider-assigned name to identify the type of *sub account*.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.2'
+- display_name: Allocated Method Details
+  column_id: AllocatedMethodDetails
+  description: A set of properties describing how resources are allocated in data generator-defined split cost allocation.
+  column_type: Dimension / Metric
+  feature_level: Recommended
+  allows_nulls: 'True'
+  data_type: JSON
+  value_format: JSON Object Format
+  introduced_version: '1.3'
+- display_name: Allocated Method ID
+  column_id: AllocatedMethodId
+  description: A unique identifier defining the method of data generator-calculated split cost allocation.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.3'
+- display_name: Allocated Resource ID
+  column_id: AllocatedResourceId
+  description: The identifier of the object to which cost is allocated in data generator-calculated split cost allocation.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.3'
+- display_name: Allocated Resource Name
+  column_id: AllocatedResourceName
+  description: The display name of the object to which cost is allocated in data generator-calculated split cost allocation.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.3'
+- display_name: Allocated Tags
+  column_id: AllocatedTags
+  description: A set of tags assigned to tag sources that are applicable to *allocated charges* in data generator-calculated split cost allocation.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: JSON
+  value_format: Key-Value Format
+  introduced_version: '1.3'
+- display_name: Contract Applied
+  column_id: ContractApplied
+  description: A set of properties that associate a *charge* with one or more *contract commitments*.
+  column_type: Dimension / Metric
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: JSON
+  value_format: JSON Object Format
+  introduced_version: '1.3'
+- display_name: Host Provider Name
+  column_id: HostProviderName
+  description: The name of the entity whose *resources* are used by the Service Provider to make their *resources* or *services* available.
+  column_type: Dimension
+  feature_level: Mandatory
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.3'
+- display_name: Service Provider Name
+  column_id: ServiceProviderName
+  description: The name of the entity that made the *resources* or *services* available for purchase or consumption.
+  column_type: Dimension
+  feature_level: Mandatory
+  allows_nulls: 'False'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.3'
+- display_name: Commitment Program Eligibility Details
+  column_id: CommitmentProgramEligibilityDetails
+  description: The types of *commitment programs* available for a specific usage row.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: JSON
+  value_format: JSON Object Format
+  introduced_version: '1.4'
+- display_name: Invoice Detail ID
+  column_id: InvoiceDetailId
+  description: The invoice-issuer-assigned identifier for an Invoice Detail record encapsulating charges in the corresponding billing period for a given billing account.
+  column_type: Dimension
+  feature_level: Conditional
+  allows_nulls: 'True'
+  data_type: String
+  value_format: \<not specified>
+  introduced_version: '1.4'

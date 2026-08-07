@@ -1,0 +1,26 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Cash vs. Accrual Comparison by Billing Period
+slug: cash-vs-accrual-comparison-by-billing-period
+source_url: https://focus.finops.org/use-case/cash-vs-accrual-comparison-by-billing-period/
+description: Highlights billing periods where the cash-based view (BilledCost) and the accrual-based view (EffectiveCost) diverge &#8211; typical of commitment discounts or prepaid purchases where billing timing differs from consumption. Returns periods where the absolute difference exceeds $0.01 to filter out rounding noise.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    InvoiceIssuerName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    SUM(BilledCost) AS TotalBilledCost,
+    SUM(EffectiveCost) AS TotalEffectiveCost,
+    SUM(EffectiveCost) - SUM(BilledCost) AS CostBasisDifference
+  FROM focus_data_table
+  WHERE
+    BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    InvoiceIssuerName,
+    BillingPeriodStart,
+    BillingPeriodEnd
+  HAVING
+    ABS(SUM(EffectiveCost) - SUM(BilledCost)) > 0.01

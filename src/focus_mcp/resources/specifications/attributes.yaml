@@ -1,20 +1,22 @@
-- name: Column Handling
-  attribute_id: column_handling
-  description: Naming and ordering convention for columns appearing in a *FOCUS dataset*.
+- name: Column Naming and Ordering
+  attribute_id: column_naming_and_ordering
+  description: Naming and ordering convention for columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
   requirements:
   - '### Column Names'
   introduced_version: '0.5'
-- name: Currency Format
-  attribute_id: currency_format
+  removed_version: '1.2'
+- name: Currency Code Format
+  attribute_id: currency_code_format
   description: Formatting for currency columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
   requirements:
-  - '* Currency-related columns MUST be represented as a three-letter alphabetic code as dictated in the governing document [ISO 4217:2015](https://www.iso.org/standard/64758.html) when the value is presented in national currency (e.g., USD, EUR).'
+  - Currency-related columns MUST be represented as a three-letter alphabetic code as dictated in the governing document [ISO 4217:2015](https://www.iso.org/standard/64758.html).
   introduced_version: '0.5'
+  removed_version: '1.2'
 - name: Date/Time Format
   attribute_id: date_time_format
   description: Rules and formatting requirements for date/time-related columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
   requirements:
-  - '* Date/time values MUST be in UTC (Coordinated Universal Time) to avoid ambiguity and ensure consistency across different time zones.'
+  - 'Column conforming to DateTimeFormat attribute MUST adhere to the following requirements:'
   introduced_version: '0.5'
 - name: Discount Handling
   attribute_id: discount_handling
@@ -22,33 +24,102 @@
   requirements:
   - '* All applicable discounts SHOULD be applied to each row they pertain to and SHOULD NOT be negated in a separate row.'
   introduced_version: 1.0-preview
+  removed_version: '1.4'
 - name: Key-Value Format
   attribute_id: key-value_format
   description: Rules and formatting requirements for columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset) that convey data as key-value pairs.
   requirements:
-  - '* Key-Value Format columns MUST contain a serialized JSON string, consistent with the [ECMA 404](https://www.ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf) definition of an object.'
+  - 'Column conforming to KeyValueFormat attribute MUST adhere to the following requirements:'
   introduced_version: 1.0-preview
 - name: Null Handling
   attribute_id: null_handling
   description: Indicates how to handle columns that don't have a value.
   requirements:
-  - '* Columns MUST use NULL when there isn''t a value that can be specified for a nullable column.'
+  - 'Column conforming to NullHandling attribute MUST adhere to the following requirements:'
   introduced_version: '0.5'
 - name: Numeric Format
   attribute_id: numeric_format
   description: Rules and formatting requirements for numeric columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
   requirements:
-  - '* Columns with a Numeric value format MUST contain a single numeric value.'
+  - 'Column conforming to NumericFormat attribute MUST adhere to the following requirements:'
   introduced_version: 1.0-preview
 - name: String Handling
   attribute_id: string_handling
   description: Requirements for string-capturing columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
   requirements:
-  - '* String values MUST maintain the original casing, spacing, and other relevant consistency factors as specified by providers and end-users.'
+  - 'Column conforming to StringHandling attribute MUST adhere to the following requirements:'
   introduced_version: '1.0'
 - name: Unit Format
   attribute_id: unit_format
   description: Indicates standards for expressing measurement units in columns appearing in a *FOCUS dataset*.
   requirements:
-  - '* Units SHOULD be expressed as a single unit of measure adhering to one of the following three formats.'
+  - 'Column conforming to UnitFormat attribute MUST adhere to the following requirements:'
   introduced_version: 1.0-preview
+- name: Column Handling
+  attribute_id: column_handling
+  description: Naming and ordering convention for columns appearing in a *FOCUS dataset*.
+  requirements:
+  - '### Column Names'
+  introduced_version: '1.2'
+  removed_version: '1.4'
+- name: Currency Format
+  attribute_id: currency_format
+  description: Formatting for currency columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset).
+  requirements:
+  - 'Column conforming to CurrencyFormat attribute MUST adhere to the following requirements:'
+  introduced_version: '1.2'
+- name: Data Generator-Calculated Split Cost Allocation Handling
+  attribute_id: data_generator-calculated_split_cost_allocation_handling
+  description: An attribute that allows data generators to offer more detailed cost and usage information based on a method defined and documented by the data generator, including support for allocating costs in cases where the usage of a resource might not match the units the resource is measured in.
+  requirements:
+  - 'Column conforming to DataGeneratorCalculatedSplitCostAllocationHandling attribute MUST adhere to the following requirements:'
+  introduced_version: '1.3'
+- name: Invoice Handling
+  attribute_id: invoice_handling
+  description: Indicates how invoice-level *charges*, including those not directly tied to usage, should be represented in a FOCUS Cost and Usage dataset.
+  requirements:
+  - '* All costs that appear on any invoice issued to a [*BillingAccountId*](#billingaccountid) MUST be included in the *FOCUS dataset*.'
+  introduced_version: '1.3'
+  removed_version: '1.4'
+- name: JSON Object Format
+  attribute_id: json_object_format
+  description: Rules and formatting requirements for columns appearing in a [*FOCUS dataset*](#glossary:FOCUS-dataset) that convey data as complex, hierarchical objects.
+  requirements:
+  - 'Column conforming to JsonObjectFormat attribute MUST adhere to the following requirements:'
+  introduced_version: '1.3'
+- name: Correction Handling
+  attribute_id: correction_handling
+  description: Defines how *corrections* to previously delivered FOCUS *dataset artifacts* are represented in subsequent deliveries.
+  requirements:
+  - 'Dataset conforming to CorrectionHandling attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'
+- name: Custom Column Handling
+  attribute_id: custom_column_handling
+  description: Column ID naming, formatting, and value requirements for *custom columns* appearing in a *FOCUS dataset*.
+  requirements:
+  - 'Column conforming to CustomColumnHandling attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'
+- name: Dataset Completeness
+  attribute_id: dataset_completeness
+  description: Defines requirements for a *FOCUS dataset* to include *custom columns* for *native dataset* columns not represented in *FOCUS columns*.
+  requirements:
+  - 'Dataset conforming to DatasetCompleteness attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'
+- name: Dataset Configuration
+  attribute_id: dataset_configuration
+  description: Defines configuration options for controlling the structure and content of a FOCUS dataset.
+  requirements:
+  - 'Dataset conforming to DatasetConfiguration attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'
+- name: Delivery Handling
+  attribute_id: delivery_handling
+  description: Defines how a *data generator* delivers a *FOCUS dataset* to a customer.
+  requirements:
+  - 'Dataset conforming to DeliveryHandling attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'
+- name: FOCUS Column Handling
+  attribute_id: focus_column_handling
+  description: Naming conventions for *FOCUS columns* appearing in a *FOCUS dataset*.
+  requirements:
+  - 'Column conforming to FocusColumnHandling attribute MUST adhere to the following requirements:'
+  introduced_version: '1.4'

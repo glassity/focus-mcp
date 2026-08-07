@@ -1,0 +1,24 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report costs by service category and subcategory
+slug: report-costs-by-service-category-and-subcategory-2
+source_url: https://focus.finops.org/use-case/report-costs-by-service-category-and-subcategory-2/
+description: Understanding costs across service providers, billing periods, and service categories (Analytics, Compute, Database, Storage, etc.) and service subcategories (Virtual Machines, Relational Databases, Content Delivery, etc) provides valuable insight into total costs.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingCurrency,
+    BillingPeriodStart,
+    ServiceCategory,
+    ServiceSubcategory,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? and BillingPeriodEnd  < ?
+  GROUP BY
+    ServiceProviderName,
+    BillingCurrency,
+    BillingPeriodStart,
+    ServiceCategory,
+    ServiceSubcategory
+  ORDER BY TotalBilledCost DESC

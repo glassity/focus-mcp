@@ -1,0 +1,15 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Understand the billing account or sub account entity
+slug: understand-the-billing-account-or-sub-account-entity-2
+source_url: https://focus.finops.org/use-case/understand-the-billing-account-or-sub-account-entity-2/
+description: List all billing and sub-accounts with charges in the period, showing service provider, account ID, name, and type. This list allows practitioners to map entity hierarchies and allocate costs.
+sql: |-
+  SELECT DISTINCT
+      ServiceProviderName,
+      BillingAccountID,
+      BillingAccountName,
+      BillingAccountType
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?

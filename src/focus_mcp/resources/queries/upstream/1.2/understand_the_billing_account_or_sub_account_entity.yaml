@@ -1,0 +1,15 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Understand the billing account or sub account entity
+slug: understand-the-billing-account-or-sub-account-entity
+source_url: https://focus.finops.org/use-case/understand-the-billing-account-or-sub-account-entity/
+description: List all billing and sub-accounts with charges in the period, showing provider, account ID, name, and type. This list allows practitioners to map entity hierarchies and allocate costs.
+sql: |-
+  SELECT DISTINCT ProviderName,
+                  BillingAccountID,
+                  BillingAccountName,
+                  BillingAccountType
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?

@@ -1,0 +1,19 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Update budgets with billed costs
+slug: update-budgets-with-billed-costs
+source_url: https://focus.finops.org/use-case/update-budgets-with-billed-costs/
+description: Finance manages tracking of budgets and must update long-term budgets with the actual costs billed each month so the budget is not exceeded.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd

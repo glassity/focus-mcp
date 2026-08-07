@@ -1,0 +1,21 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Compare billed cost per subaccount to budget
+slug: compare-billed-budget
+source_url: https://focus.finops.org/use-case/compare-billed-budget/
+description: Product wants to confirm charges are in line with expectations (budgets) for a business which has all its cost within a single subaccount. The ChargePeriod is used for filtering to capture items that apply to the period only (excludes adjustments from previous periods that were applied in the current BillingPeriod).
+sql: |-
+  SELECT ProviderName,
+         SubAccountId,
+         SubAccountName,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargeCategory = 'Usage'
+    AND ChargePeriodStart >= ?
+    and ChargePeriodEnd <= ?
+    AND ProviderName = ?
+    AND SubAccountId = ?
+  GROUP BY ProviderName,
+           SubAccountId,
+           SubAccountName

@@ -1,0 +1,28 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report spending across billing periods for a provider by service category
+slug: report-spending-across-billing-periods-by-service-category
+source_url: https://focus.finops.org/use-case/report-spending-across-billing-periods-by-service-category/
+description: Understanding costs across providers, billing periods, billing accounts, and service categories (Analytics, Compute, Database, Storage, etc.) provides valuable insight into total costs and can be used by Procurement to focus negotiations for specific providers with details on the billing accounts that are driving costs.   to focus negotiations toward highest costing items.
+sql: |-
+  SELECT ProviderName,
+         BillingAccountName,
+         BillingAccountId,
+         BillingCurrency,
+         BillingPeriodStart,
+         ServiceCategory,
+         ServiceName,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND ProviderName = ?
+  GROUP BY ProviderName,
+           BillingAccountName,
+           BillingAccountId,
+           BillingCurrency,
+           BillingPeriodStart,
+           ServiceCategory,
+           ServiceName
+  ORDER BY TotalBilledCost DESC

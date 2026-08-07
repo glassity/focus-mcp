@@ -1,0 +1,9 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Verify accuracy of provider invoices aka invoice reconciliation
+slug: verify-accuracy-of-provider-invoices-aka-invoice-reconciliation
+source_url: https://focus.finops.org/use-case/verify-accuracy-of-provider-invoices-aka-invoice-reconciliation/
+description: Aggregate provider billing data for each period and reconcile it against provider invoices to validate charge accuracy, flag discrepancies, and strengthen financial accountability.
+sql: "SELECT \n    InvoiceIssuerName,\n    InvoiceId,\n    SUM(BilledCost) AS TotalBilledCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nGROUP BY\n    InvoiceIssuerName,\n    InvoiceId"
+divergence_note: Upstream corrected this query in 1.3, so the workaround the 1.2 collection carries is not needed here.

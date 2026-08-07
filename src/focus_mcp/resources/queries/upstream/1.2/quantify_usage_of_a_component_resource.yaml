@@ -1,0 +1,23 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Quantify usage of a component resource
+slug: quantify-usage-of-a-component-resource
+source_url: https://focus.finops.org/use-case/quantify-usage-of-a-component-resource/
+description: Capture daily aggregate usage of component resources, such as core hours or gigabytes, when Providers bill by virtual machines or quantity provisioned. This approach allows FinOps Practitioners to account for scenarios such as analyzing usage across auto-scaled compute services when instantaneous APIs cannot capture historical trends.
+sql: |-
+  SELECT ProviderName,
+         ServiceName,
+         PricingUnit,
+         RegionName,
+         JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.InstanceSeries')) AS InstanceSeries,
+         SUM(CAST(JSON_UNQUOTE(JSON_EXTRACT(SkuPriceDetails, '$.CoreCount')) AS UNSIGNED)) AS TotalCoreCount
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND JSON_CONTAINS_PATH(SkuPriceDetails, 'all', '$.CoreCount', '$.InstanceSeries')
+  GROUP BY ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           InstanceSeries

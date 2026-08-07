@@ -1,0 +1,17 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Identify resources with shared cost allocation
+slug: identify-resources-with-shared-cost-allocation
+source_url: https://focus.finops.org/use-case/identify-resources-with-shared-cost-allocation/
+description: Find all resources that have costs split across multiple workloads or consumers, such as shared Kubernetes clusters or multi-tenant databases, to enable accurate chargeback.
+sql: |-
+  SELECT
+    DISTINCT ResourceId,
+    ResourceName,
+    AllocatedMethodId
+   FROM focus_data_table
+   WHERE ChargeCategory='Usage'
+    AND ChargePeriodStart >= ? AND ChargePeriodEnd <= ?
+    AND AllocatedMethodId IS NOT NULL
+   ORDER BY ResourceId

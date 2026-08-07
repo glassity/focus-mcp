@@ -1,0 +1,18 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Validate Tax Variance
+slug: validate-tax-variance
+source_url: https://focus.finops.org/use-case/validate-tax-variance/
+description: Identifies the tax component present in the Invoice Detail dataset that is typically excluded from the Cost and Usage dataset, allowing for a complete three-way match between usage, tax, and the total invoice amount.
+sql: |-
+  SELECT
+    InvoiceId,
+    SUM(CASE WHEN ChargeCategory = 'Tax' THEN BilledCost ELSE 0 END) AS TotalTaxAmount,
+    SUM(CASE WHEN ChargeCategory <> 'Tax' THEN BilledCost ELSE 0 END) AS TotalServiceAmount,
+    SUM(BilledCost) AS GrandTotalPayable
+  FROM InvoiceDetail
+  WHERE
+    InvoiceId = ?
+  GROUP BY
+    InvoiceId

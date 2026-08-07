@@ -1,0 +1,20 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Verify accuracy of provider invoices
+slug: verify-invoices
+source_url: https://focus.finops.org/use-case/verify-invoices/
+description: As a FinOps Practitioner, I need to verify the accuracy of provider invoices.
+sql: |-
+  SELECT ProviderName,
+         BillingAccountId,
+         BillingAccountName,
+         BillingCurrency,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+  GROUP BY ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency

@@ -1,0 +1,14 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Determine Effective Savings Rate
+slug: determine-effective-savings-rate
+source_url: https://focus.finops.org/use-case/determine-effective-savings-rate/
+description: 'The Effective Savings Rate (ESR) is a KPI to track the efficiency of using commitment discounts. The KPI calculation is (Contracted Cost &#8211; Effective Cost) / Contracted Cost. Outcome: FinOps Practitioners are able to compute the ESR, which is (Contracted Cost &#8211; Effective Cost) / Contracted Cost.'
+sql: |-
+  SELECT
+    SUM(ContractedCost) AS ContractedCost,
+    SUM(EffectiveCost) AS EffectiveCost,
+    (SUM(ContractedCost) - SUM(EffectiveCost)) / NULLIF(SUM(ContractedCost), 0) AS EffectiveSavingsRate
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?

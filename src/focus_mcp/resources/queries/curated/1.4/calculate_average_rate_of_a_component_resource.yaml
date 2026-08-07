@@ -1,0 +1,9 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. JSON_CONTAINS_PATH becomes json_exists. MySQL-only constructs upstream ships untested against DuckDB. JSON_UNQUOTE/JSON_EXTRACT becomes json_extract_string. MySQL-only constructs upstream ships untested against DuckDB. CAST AS UNSIGNED becomes BIGINT.
+title: Calculate average rate of a component resource
+slug: calculate-average-rate-of-a-component-resource-2
+source_url: https://focus.finops.org/use-case/calculate-average-rate-of-a-component-resource-2/
+description: Aggregate usage and pricing across multiple SKUs to compute the average cost per core for each virtual machine series by region. This common denominator supports benchmarking when billed and consumed units differ.
+sql: "SELECT\n    ServiceProviderName,\n    ServiceName,\n    PricingUnit,\n    RegionName,\n    json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries, \n    SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount,\n    CASE \n        WHEN SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) > 0 \n        THEN SUM(EffectiveCost) / SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT))\n        ELSE NULL\n    END AS AverageEffectiveCoreCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nAND json_exists(SkuPriceDetails, '$.CoreCount') AND json_exists(SkuPriceDetails, '$.InstanceSeries')\nGROUP BY\n    ServiceProviderName,\n    ServiceName,\n    PricingUnit,\n    RegionName,\n    InstanceSeries"

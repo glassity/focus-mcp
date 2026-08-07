@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: Upstream query is missing the comma between the two SUM expressions and names the table focus_data_tabl.
+title: Determine contracted savings by virtual currency
+slug: determine-contracted-savings-by-virtual-currency
+source_url: https://focus.finops.org/use-case/determine-contracted-savings-by-virtual-currency/
+description: Compare the virtual currency discounted rate to the virtual currency list price to determine the difference, as contracts can lower the virtual-currency price of certain operations.
+sql: |-
+  SELECT ServiceName,
+         ServiceSubcategory,
+         ChargeDescription,
+         BillingCurrency,
+         PricingCurrency,
+         SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency,
+         SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND PricingCurrencyListUnitPrice > PricingCurrencyContractedUnitPrice
+  GROUP BY ServiceName,
+           ServiceSubcategory,
+           ChargeDescription,
+           BillingCurrency,
+           PricingCurrency

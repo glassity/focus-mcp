@@ -1,0 +1,30 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Join contract commitment details with usage charges
+slug: join-contract-commitment-details-with-usage-charges
+source_url: https://focus.finops.org/use-case/join-contract-commitment-details-with-usage-charges/
+description: Combine cost and usage data with contract commitment metadata to analyze commitment terms, categories, and periods alongside actual consumption patterns.
+sql: |-
+  SELECT
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID') AS ContractCommitmentId,
+    CC.ContractCommitmentCategory,
+    CC.ContractCommitmentPeriodStart,
+    CC.ContractCommitmentPeriodEnd,
+    CC.ContractCommitmentCost,
+    SUM(CU.EffectiveCost) AS TotalUsageCost,
+    SUM(CAST(JSON_VALUE(CA, '$.ContractCommitmentAppliedCost') AS FLOAT64)) AS AppliedCost
+   FROM focus_data_table CU
+   CROSS JOIN
+    UNNEST(JSON_EXTRACT_ARRAY(CU.ContractApplied, '$.Elements')) AS CA
+   JOIN contract_commitment CC
+    ON JSON_VALUE(CA, '$.ContractCommitmentID') = CC.ContractCommitmentId
+   WHERE CU.ChargePeriodStart >= ? AND CU.ChargePeriodEnd < ?
+   GROUP BY
+    CU.ServiceProviderName,
+    JSON_VALUE(CA, '$.ContractCommitmentID'),
+    CC.ContractCommitmentCategory,
+    CC.ContractCommitmentPeriodStart,
+    CC.ContractCommitmentPeriodEnd,
+    CC.ContractCommitmentCost

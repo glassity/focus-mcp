@@ -5,132 +5,110 @@
 # (see tests/focus_fixtures.py) so queries return rows rather than trivially
 # matching nothing.
 
-understand_the_billing_account_or_sub_account_entity:
+allocate_application_multi_currency:
 - '2025-05-01'
 - '2025-09-30'
-identify_sources_of_billed_cost:
-- '2025-05-01'
-- '2025-09-30'
-analyze_credit_memos:
-- '2025-05-01'
-- '2025-09-30'
-verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
-- '2025-05-01'
-- '2025-09-30'
-calculate_average_rate_of_a_component_resource:
-- '2025-05-01'
-- '2025-09-30'
-quantify_usage_of_a_component_resource:
-- '2025-05-01'
-- '2025-09-30'
-calculate_unit_economics: []
-calculate_consumption_of_virtual_currency_within_a_billing_period:
-- '2025-05-01'
-- '2025-09-30'
-- AWS
-determine_target_of_virtual_currency_usage:
-- '2025-05-01'
-- '2025-09-30'
-- AWS
-analyze_effective_cost_by_pricing_currency:
-- '2025-05-01'
-- '2025-09-30'
-analyze_purchase_of_virtual_currency:
-- '2025-05-01'
-- '2025-09-30'
-- AWS
-determine_contracted_savings_by_virtual_currency:
+analyze_service_costs_by_region:
 - '2025-05-01'
 - '2025-09-30'
 analyze_tag_coverage:
-- Environment
+- Application
 - '2025-05-01'
 - '2025-09-30'
 - AWS
-analyze_the_different_metered_costs_for_a_particular_sku:
+application_cost:
+- web
 - '2025-05-01'
 - '2025-09-30'
-report_costs_by_service_category_and_subcategory:
+compare_billed_budget:
 - '2025-05-01'
 - '2025-09-30'
-analyze_capacity_reservations_on_compute_costs:
-- '2025-05-01'
-- '2025-09-30'
-identify_unused_capacity_reservations:
+- AWS
+- '222222222222'
+compare_usage_month_over_month:
 - '2025-05-01'
 - '2025-09-30'
 corrections_by_subaccount:
 - '2025-05-01'
 - '2025-09-30'
-recurring_commitment_charges:
+cost_compute_subaccount:
+- '222222222222'
 - '2025-05-01'
 - '2025-09-30'
-costs_service_name:
+costs_by_availability_zone:
+- '222222222222'
 - '2025-05-01'
 - '2025-09-30'
-- EC2
-report_spending_across_billing_periods_by_service_category:
-- '2025-05-01'
-- '2025-09-30'
-- AWS
-analyze_service_costs_by_region:
-- '2025-05-01'
-- '2025-09-30'
-report_service_costs_by_providers_subaccount:
-- '2025-05-01'
-- '2025-09-30'
-- EC2
-- '123456789012'
-service_costs_month_over_month:
-- '2025-05-01'
-- '2025-09-30'
-application_cost:
-- '2025-05-01'
-- '2025-09-30'
-- WebApp
-resource_component_costs:
-- '2025-05-01'
-- '2025-09-30'
-- i-1234567890abcdef0
 costs_service_category:
 - '2025-05-01'
 - '2025-09-30'
-report_corrections:
-- '2025-05-01'
-- '2025-09-30'
-effective_cost_compute:
-- '2025-05-01'
-- '2025-09-30'
-commitment_discount_purchases:
-- '2025-05-01'
-- '2025-09-30'
-effective_savings_rate_services:
-- '2025-05-01'
-- '2025-09-30'
-effective_savings_rate:
-- '2025-05-01'
-- '2025-09-30'
-resource_costs_sku:
-- '2025-05-01'
-- '2025-09-30'
-marketplace_vendors_costs:
-- '2025-05-01'
-- '2025-09-30'
-cost_compute_subaccount:
-- '2025-05-01'
-- '2025-09-30'
-- '123456789012'
-costs_by_availability_zone:
-- '2025-05-01'
-- '2025-09-30'
-- '123456789012'
-daily_anomaly_services:
+costs_service_name:
+- Amazon Elastic Compute Cloud
 - '2025-05-01'
 - '2025-09-30'
 daily_anomaly_region:
 - '2025-05-01'
 - '2025-09-30'
+daily_anomaly_services:
+- '2025-05-01'
+- '2025-09-30'
 daily_anomaly_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+effective_cost_compute:
+- '2025-05-01'
+- '2025-09-30'
+effective_savings_rate:
+- '2025-05-01'
+- '2025-09-30'
+effective_savings_rate_services:
+- '2025-05-01'
+- '2025-09-30'
+forecast_amortized_costs:
+- '2025-05-01'
+- '2025-09-30'
+forecast_cashflow:
+- '2025-05-01'
+- '2025-09-30'
+forecast_costs:
+- '2025-05-01'
+- '2025-09-30'
+identify_unused_commitments:
+- '2025-05-01'
+- '2025-09-30'
+marketplace_vendors_costs:
+- '2025-05-01'
+- '2025-09-30'
+recurring_commitment_charges:
+- '2025-05-01'
+- '2025-09-30'
+report_corrections:
+- '2025-05-01'
+- '2025-09-30'
+report_service_costs_by_providers_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+- '222222222222'
+- AWS
+report_spending_across_billing_periods_by_service_category:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+report_subaccount_regions:
+- '2025-05-01'
+- '2025-09-30'
+resource_component_costs:
+- '2025-05-01'
+- '2025-09-30'
+- i-0123456789abcdef0
+resource_costs_sku:
+- '2025-05-01'
+- '2025-09-30'
+service_costs_month_over_month:
+- '2025-05-01'
+- '2025-09-30'
+service_costs_subaccount:
+- '2025-05-01'
 - '2025-05-01'
 - '2025-09-30'
 update_application_budgets:
@@ -139,42 +117,119 @@ update_application_budgets:
 update_budgets:
 - '2025-05-01'
 - '2025-09-30'
-report_subaccount_regions:
-- '2025-05-01'
-- '2025-09-30'
-forecast_costs:
-- '2025-05-01'
-- '2025-09-30'
-forecast_cashflow:
-- '2025-05-01'
-- '2025-09-30'
-forecast_amortized_costs:
-- '2025-05-01'
-- '2025-09-30'
 verify_discounts_applied:
-- '2025-05-01'
-- '2025-09-30'
-verify_service_charges:
 - '2025-05-01'
 - '2025-09-30'
 verify_invoices:
 - '2025-05-01'
 - '2025-09-30'
-compare_usage_month_over_month:
+verify_service_charges:
 - '2025-05-01'
 - '2025-09-30'
-service_costs_subaccount:
+analyze_capacity_reservations_on_compute_costs:
 - '2025-05-01'
 - '2025-09-30'
-- '123456789012'
-identify_unused_commitments:
+analyze_the_different_metered_costs_for_a_particular_sku:
 - '2025-05-01'
 - '2025-09-30'
-allocate_application_multi_currency:
+commitment_discount_purchases:
 - '2025-05-01'
 - '2025-09-30'
-compare_billed_budget:
+identify_unused_capacity_reservations:
 - '2025-05-01'
 - '2025-09-30'
-- '123456789012'
-- 10000
+report_costs_by_service_category_and_subcategory:
+- '2025-05-01'
+- '2025-09-30'
+analyze_credit_memos:
+- '2025-05-01'
+- '2025-09-30'
+analyze_effective_cost_by_pricing_currency:
+- '2025-05-01'
+- '2025-09-30'
+analyze_purchase_of_virtual_currency:
+- '2025-05-01'
+- '2025-09-30'
+- Hours
+calculate_average_rate_of_a_component_resource:
+- '2025-05-01'
+- '2025-09-30'
+calculate_consumption_of_virtual_currency_within_a_billing_period:
+- '2025-05-01'
+- '2025-09-30'
+- USD
+calculate_unit_economics: []
+determine_contracted_savings_by_virtual_currency:
+- '2025-05-01'
+- '2025-09-30'
+determine_target_of_virtual_currency_usage:
+- '2025-05-01'
+- '2025-09-30'
+- USD
+identify_sources_of_billed_cost:
+- '2025-05-01'
+- '2025-09-30'
+quantify_usage_of_a_component_resource:
+- '2025-05-01'
+- '2025-09-30'
+understand_the_billing_account_or_sub_account_entity:
+- '2025-05-01'
+- '2025-09-30'
+verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
+- '2025-05-01'
+- '2025-09-30'
+analyze_cost_by_participating_entities:
+- '2025-05-01'
+- '2025-09-30'
+analyze_total_cost_by_allocated_resource:
+- '2025-05-01'
+- '2025-09-30'
+identify_resources_with_shared_cost_allocation:
+- '2025-05-01'
+- '2025-09-30'
+report_on_initial_contract_commitments:
+- '2025-05-01'
+- '2025-09-30'
+report_spending_across_billing_periods_for_a_service_provider_by_service_category:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+track_contract_commitment_burn_down_over_time:
+- '2025-05-01'
+- '2025-09-30'
+track_marketplace_purchases_across_providers:
+- '2025-05-01'
+- '2025-09-30'
+verify_accuracy_of_service_provider_invoices:
+- '2025-05-01'
+- '2025-09-30'
+verify_accuracy_of_services_charges_across_service_providers:
+- '2025-05-01'
+- '2025-09-30'
+verify_discount_accuracy_for_a_previously_invoiced_billing_period_corrections_excluded:
+- '2025-05-01'
+- '2025-09-30'
+calculate_commitment_discount_coverage_rate_with_eligibility_adjusted_denominator:
+- '2025-05-01'
+- '2025-09-30'
+cash_vs_accrual_comparison_by_billing_period:
+- '2025-05-01'
+- '2025-09-30'
+commitment_discount_effective_cost_breakdown:
+- '2025-05-01'
+- '2025-09-30'
+compare_commitment_opportunities_across_providers_cross_provider_with_saas:
+- '2025-05-01'
+- '2025-09-30'
+discount_effectiveness_by_service:
+- '2025-05-01'
+- '2025-09-30'
+effective_cost_by_service_and_region:
+- '2025-05-01'
+- '2025-09-30'
+identify_eligible_capacity_reservation_spend:
+- '2025-05-01'
+- '2025-09-30'
+identify_eligible_uncovered_spend_by_program_type:
+- '2025-05-01'
+- '2025-09-30'

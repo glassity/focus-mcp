@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze costs by service name
+slug: analyze-costs-by-service-name
+source_url: https://focus.finops.org/use-case/analyze-costs-by-service-name/
+description: Analyzing service-level spending trends over a time period can expose expected and unexpected growth in the consumption of a service, and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering, and finance leaders within the organization.
+sql: |-
+  SELECT
+    BillingPeriodStart,
+    ServiceProviderName,
+    SubAccountId,
+    SubAccountName,
+    ServiceName,
+    SUM(BilledCost) AS TotalBilledCost,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ServiceName = ?
+    AND BillingPeriodStart >= ? AND BillingPeriodStart < ?
+  GROUP BY
+    BillingPeriodStart,
+    ServiceProviderName,
+    SubAccountId,
+    SubAccountName,
+    ServiceName

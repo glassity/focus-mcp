@@ -263,6 +263,20 @@ def format_query_results(rows, columns, limit):
     return [dict(zip(columns, row)) for row in rows[:limit]]
 
 
+def provider_expression(columns: list) -> str:
+    """The provider column this dataset actually has.
+
+    FOCUS 1.3 renamed ProviderName to ServiceProviderName, and a dataset
+    read with union_by_name can span the rename and carry both columns
+    half-filled, so the newer name is preferred with the older as fallback
+    rather than either being assumed.
+    """
+    present = [c for c in ("ServiceProviderName", "ProviderName") if c in columns]
+    if len(present) == 2:
+        return f"COALESCE({present[0]}, {present[1]})"
+    return present[0] if present else "NULL"
+
+
 @mcp.tool()
 async def get_data_info() -> dict[str, Any]:
     """
@@ -302,28 +316,33 @@ async def get_data_info() -> dict[str, Any]:
                 }
             }
 
+        # Get complete column list to understand data schema
+        # Useful for users to know what fields are available for analysis
+        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data_table'"
+        columns = [row[0] for row in conn.execute(columns_query).fetchall()]
+
+        provider = provider_expression(columns)
+
         # Generate comprehensive data summary using FOCUS standard columns
         # These fields are part of the FOCUS specification for cloud billing
-        summary_query = """
+        summary_query = f"""
             SELECT
                 COUNT(*) as row_count,
                 MIN(BillingPeriodStart) as earliest_date,
                 MAX(BillingPeriodEnd) as latest_date,
-                COUNT(DISTINCT ProviderName) as provider_count,
+                COUNT(DISTINCT {provider}) as provider_count,
                 COUNT(DISTINCT ServiceName) as service_count,
                 ROUND(SUM(EffectiveCost), 2) as total_cost
             FROM focus_data_table
         """
         summary = conn.execute(summary_query).fetchone()
 
-        # Get complete column list to understand data schema
-        # Useful for users to know what fields are available for analysis
-        columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data_table'"
-        columns = [row[0] for row in conn.execute(columns_query).fetchall()]
-
         # Sample cloud providers to give users context about data sources
         # Limited to 10 to avoid overwhelming output while providing useful examples
-        providers_query = "SELECT DISTINCT ProviderName FROM focus_data_table LIMIT 10"
+        providers_query = (
+            f"SELECT DISTINCT {provider} FROM focus_data_table "
+            f"WHERE {provider} IS NOT NULL LIMIT 10"
+        )
         providers = [row[0] for row in conn.execute(providers_query).fetchall()]
 
         return {
@@ -373,14 +392,15 @@ async def list_use_cases() -> dict[str, Any]:
         Dictionary containing the list of available queries with metadata
     """
     try:
-        all_queries = list(focus_queries.queries.values())
-
         # Format use cases with lightweight metadata only
         # Excludes SQL text to keep response size manageable for browsing
+        # The advertised id is the lookup key rather than upstream's URL
+        # slug: the two differ for some queries, and an id this list hands
+        # out must resolve when passed back to get_use_case.
         use_cases = []
-        for query in all_queries:
+        for key, query in focus_queries.queries.items():
             use_case = {
-                "id": query.slug,
+                "id": key,
                 "name": query.name,
                 "description": query.description or "No description available",
                 "parameter_count": query.query.count('?'),
@@ -420,14 +440,8 @@ async def get_use_case(
         Dictionary with complete query details or error information
     """
     try:
-        # Retrieve the query template from the loaded queries
-        # Try both formats: with underscores (key) and with hyphens (slug)
+        # get_query resolves keys and upstream slugs alike
         query_template = focus_queries.get_query(use_case_id)
-        if not query_template:
-            # Try converting hyphens to underscores
-            alt_id = use_case_id.replace("-", "_")
-            query_template = focus_queries.get_query(alt_id)
-
         if not query_template:
             return {"error": f"Use case not found: {use_case_id}"}
 
@@ -499,14 +513,8 @@ async def execute_query(
 
         # Determine SQL to execute and gather metadata
         if use_case:
-            # Load predefined query from the query library
-            # Try both formats: with hyphens (slug) and with underscores (key)
+            # get_query resolves keys and upstream slugs alike
             query_template = focus_queries.get_query(use_case)
-            if not query_template:
-                # Try converting hyphens to underscores
-                alt_id = use_case.replace("-", "_")
-                query_template = focus_queries.get_query(alt_id)
-
             if not query_template:
                 return {
                     "error": f"Use case not found: {use_case}. Use 'list_use_cases' to see available queries."

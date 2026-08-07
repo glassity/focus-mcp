@@ -1,0 +1,8 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze capacity reservations on compute costs
+slug: analyze-capacity-reservations-on-compute-costs-2
+source_url: https://focus.finops.org/use-case/analyze-capacity-reservations-on-compute-costs-2/
+description: Compute costs are often the highest spend area in a cloud bill, it may be useful for FinOps practitioners and Engineers to understand the volume of costs that are coming from reserved commitments either used or unused compared to the amount of compute costs that have no reservations applied. Capacity reservations can be very useful for Engineering to help them ensure capacity is available for their services when it is needed, however when reducing usage and rightsizing workloads capacity reservations need to be adjusted at the same time.
+sql: "SELECT\n  CASE \n        WHEN CapacityReservationId IS NOT NULL AND  CapacityReservationStatus  = 'Unused' THEN 'Unused Capacity Reservation'\n        WHEN CapacityReservationId IS NOT NULL AND  CapacityReservationStatus  = 'Used' THEN 'Compute using Capacity Reservation'\n        ELSE 'Compute without Capacity Reservation'\n  END AS Status,\n  ServiceProviderName,\n  BillingAccountId,\n  SUM(BilledCost) AS TotalBilledCost,\n  SUM(EffectiveCost) AS TotalEffectiveCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?\n  AND ServiceCategory = 'Compute'\nGROUP BY\n  ServiceProviderName,\n  BillingAccountId,\n  CapacityReservationId,\n  CapacityReservationStatus"
