@@ -9,7 +9,7 @@
   introduced_version: '0.5'
 - display_name: Billed Cost
   column_id: BilledCost
-  description: Cost of a *charge* as invoiced by the [*invoice issuer*](#glossary:invoice-issuer) in a given *billing period*.
+  description: Cost of a *charge* as invoiced by the *invoice issuer* in a given *billing period*.
   column_type: Metric
   feature_level: Mandatory
   allows_nulls: 'False'
@@ -64,6 +64,17 @@
 - display_name: Charge Category
   column_id: ChargeCategory
   description: Represents the highest-level classification of a *charge* based on the nature of how it is billed.
+  allowed_values:
+  - value: Usage
+    description: Positive or negative *charges* based on the quantity of a service or resource that was consumed over a given period of time including refunds.
+  - value: Purchase
+    description: Positive or negative *charges* for the acquisition of a service or resource bought upfront or on a recurring basis including refunds.
+  - value: Tax
+    description: Positive or negative applicable taxes that are levied by the relevant authorities including refunds. Tax *charges* may vary depending on factors such as the location, jurisdiction, and local or federal regulations.
+  - value: Credit
+    description: Positive or negative *charges* granted by the service provider for various scenarios e.g., promotional credits or corrections to promotional credits.
+  - value: Adjustment
+    description: Positive or negative *charges* the service provider applies that do not fall into other category values.
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'False'
@@ -73,6 +84,9 @@
 - display_name: Charge Class
   column_id: ChargeClass
   description: Indicates whether a *charge* represents a correction to a previously *closed billing period*.
+  allowed_values:
+  - value: Correction
+    description: Correction to a previously *closed billing period* (e.g., refunds and credit modifications).
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'True'
@@ -91,6 +105,13 @@
 - display_name: Charge Frequency
   column_id: ChargeFrequency
   description: Indicates how often a *charge* will occur.
+  allowed_values:
+  - value: One-Time
+    description: '*Charges* that only happen once and will not repeat. One-time *charges* are typically recorded on the hour or day when the cost was incurred.'
+  - value: Recurring
+    description: '*Charges* that repeat on a periodic cadence (e.g., weekly, monthly) regardless of whether the product or *service* was used. Recurring *charges* typically happen on the same day or point within every period. The charge date does not change based on how or when the *service* is used.'
+  - value: Usage-Based
+    description: '*Charges* that repeat every time the *service* is used. Usage-based *charges* are typically recorded hourly or daily, based on the granularity of the cost data for the period when the *service* was used (referred to as *charge period*). Usage-based *charges* are not recorded when the *service* is not used.'
   column_type: Dimension
   feature_level: Recommended
   allows_nulls: 'False'
@@ -118,6 +139,11 @@
 - display_name: Commitment Discount Category
   column_id: CommitmentDiscountCategory
   description: Indicates whether the *commitment discount* identified in the CommitmentDiscountId column is based on usage quantity or cost (aka "spend").
+  allowed_values:
+  - value: Spend
+    description: Commitment discounts that require a predetermined amount of spend.
+  - value: Usage
+    description: Commitment discounts that require a predetermined amount of usage.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -145,6 +171,11 @@
 - display_name: Commitment Discount Status
   column_id: CommitmentDiscountStatus
   description: Indicates whether the *charge* corresponds with the consumption of a *commitment discount* or the unused portion of the committed amount.
+  allowed_values:
+  - value: Used
+    description: '*Charges* that utilized a specific amount of a commitment discount.'
+  - value: Unused
+    description: '*Charges* that represent the unused portion of the commitment discount.'
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -235,6 +266,15 @@
 - display_name: Pricing Category
   column_id: PricingCategory
   description: Describes the pricing model used for a *charge* at the time of use or purchase.
+  allowed_values:
+  - value: Standard
+    description: '*Charges* priced at the agreed upon rate for the billing account, including *negotiated discounts*. This pricing includes any flat rate and volume/tiered pricing but does not include dynamic pricing or reduced pricing due to the application of a *commitment discount*. This does include the purchase of a commitment discount at agreed upon rates.'
+  - value: Dynamic
+    description: '*Charges* priced at a variable rate determined by the service provider. This includes any product or service with a unit price the service provider can change without notice, like interruptible or low priority *resources*.'
+  - value: Committed
+    description: '*Charges* with reduced pricing due to the application of the *commitment discount* specified by the Commitment Discount ID.'
+  - value: Other
+    description: '*Charges* priced in a way not covered by another pricing category.'
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -327,6 +367,47 @@
 - display_name: Service Category
   column_id: ServiceCategory
   description: Highest-level classification of a *service* based on the core function of the *service*.
+  allowed_values:
+  - value: Service Category
+    description: Description
+  - value: AI and Machine Learning
+    description: Artificial Intelligence and Machine Learning related technologies.
+  - value: Analytics
+    description: Data processing, analytics, and visualization capabilities.
+  - value: Business Applications
+    description: Business and productivity applications and services.
+  - value: Compute
+    description: Virtual, containerized, serverless, or high-performance computing infrastructure and services.
+  - value: Databases
+    description: Database platforms and services that allow for storage and querying of data.
+  - value: Developer Tools
+    description: Software development and delivery tools and services.
+  - value: Multicloud
+    description: Support for interworking of multiple cloud and/or on-premises environments.
+  - value: Identity
+    description: Identity and access management services.
+  - value: Integration
+    description: Services that allow applications to interact with one another.
+  - value: Internet of Things
+    description: Development and management of IoT devices and networks.
+  - value: Management and Governance
+    description: Management, logging, and observability of a customer's use of cloud.
+  - value: Media
+    description: Media and entertainment streaming and processing services.
+  - value: Migration
+    description: Moving applications and data to the cloud.
+  - value: Mobile
+    description: Services enabling cloud applications to interact via mobile technologies.
+  - value: Networking
+    description: Network connectivity and management.
+  - value: Security
+    description: Security monitoring and compliance services.
+  - value: Storage
+    description: Storage services for structured or unstructured data.
+  - value: Web
+    description: Services enabling cloud applications to interact via the Internet.
+  - value: Other
+    description: New or emerging services that do not align with an existing category.
   column_type: Dimension
   feature_level: Mandatory
   allows_nulls: 'False'
@@ -362,7 +443,7 @@
   introduced_version: 1.0-preview
 - display_name: Sub Account ID
   column_id: SubAccountId
-  description: An ID assigned to a grouping of [*resources*](#glossary:resource) or [*services*](#glossary:service), often used to manage access and/or cost.
+  description: An ID assigned to a grouping of *resources* or *services*, often used to manage access and/or cost.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -371,7 +452,7 @@
   introduced_version: '0.5'
 - display_name: Sub Account Name
   column_id: SubAccountName
-  description: A name assigned to a grouping of [*resources*](#glossary:resource) or [*services*](#glossary:service), often used to manage access and/or cost.
+  description: A name assigned to a grouping of *resources* or *services*, often used to manage access and/or cost.
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -399,6 +480,11 @@
 - display_name: Capacity Reservation Status
   column_id: CapacityReservationStatus
   description: Indicates whether the *charge* represents either the consumption of a *capacity reservation* or when a *capacity reservation* is unused.
+  allowed_values:
+  - value: Used
+    description: '*Charges* that utilized a specific amount of a *capacity reservation*.'
+  - value: Unused
+    description: '*Charges* that represent the unused portion of a *capacity reservation*.'
   column_type: Dimension
   feature_level: Conditional
   allows_nulls: 'True'
@@ -426,6 +512,173 @@
 - display_name: Service Subcategory
   column_id: ServiceSubcategory
   description: Secondary classification of the Service Category for a *service* based on its core function.
+  allowed_values:
+  - value: Service Category
+    description: Service Subcategory
+  - value: AI and Machine Learning
+    description: AI Platforms
+  - value: AI and Machine Learning
+    description: Bots
+  - value: AI and Machine Learning
+    description: Generative AI
+  - value: AI and Machine Learning
+    description: Machine Learning
+  - value: AI and Machine Learning
+    description: Natural Language Processing
+  - value: AI and Machine Learning
+    description: Other (AI and Machine Learning)
+  - value: Analytics
+    description: Analytics Platforms
+  - value: Analytics
+    description: Business Intelligence
+  - value: Analytics
+    description: Data Processing
+  - value: Analytics
+    description: Search
+  - value: Analytics
+    description: Streaming Analytics
+  - value: Analytics
+    description: Other (Analytics)
+  - value: Business Applications
+    description: Productivity and Collaboration
+  - value: Business Applications
+    description: Other (Business Applications)
+  - value: Compute
+    description: Containers
+  - value: Compute
+    description: End User Computing
+  - value: Compute
+    description: Quantum Compute
+  - value: Compute
+    description: Serverless Compute
+  - value: Compute
+    description: Virtual Machines
+  - value: Compute
+    description: Other (Compute)
+  - value: Databases
+    description: Caching
+  - value: Databases
+    description: Data Warehouses
+  - value: Databases
+    description: Ledger Databases
+  - value: Databases
+    description: NoSQL Databases
+  - value: Databases
+    description: Relational Databases
+  - value: Databases
+    description: Time Series Databases
+  - value: Databases
+    description: Other (Databases)
+  - value: Developer Tools
+    description: Developer Platforms
+  - value: Developer Tools
+    description: Continuous Integration and Deployment
+  - value: Developer Tools
+    description: Development Environments
+  - value: Developer Tools
+    description: Source Code Management
+  - value: Developer Tools
+    description: Quality Assurance
+  - value: Developer Tools
+    description: Other (Developer Tools)
+  - value: Identity
+    description: Identity and Access Management
+  - value: Identity
+    description: Other (Identity)
+  - value: Integration
+    description: API Management
+  - value: Integration
+    description: Messaging
+  - value: Integration
+    description: Workflow Orchestration
+  - value: Integration
+    description: Other (Integration)
+  - value: Internet of Things
+    description: IoT Analytics
+  - value: Internet of Things
+    description: IoT Platforms
+  - value: Internet of Things
+    description: Other (Internet of Things)
+  - value: Management and Governance
+    description: Architecture
+  - value: Management and Governance
+    description: Compliance
+  - value: Management and Governance
+    description: Cost Management
+  - value: Management and Governance
+    description: Data Governance
+  - value: Management and Governance
+    description: Disaster Recovery
+  - value: Management and Governance
+    description: Endpoint Management
+  - value: Management and Governance
+    description: Observability
+  - value: Management and Governance
+    description: Support
+  - value: Management and Governance
+    description: Other (Management and Governance)
+  - value: Media
+    description: Content Creation
+  - value: Media
+    description: Gaming
+  - value: Media
+    description: Media Streaming
+  - value: Media
+    description: Mixed Reality
+  - value: Media
+    description: Other (Media)
+  - value: Migration
+    description: Data Migration
+  - value: Migration
+    description: Resource Migration
+  - value: Migration
+    description: Other (Migration)
+  - value: Mobile
+    description: Other (Mobile)
+  - value: Multicloud
+    description: Multicloud Integration
+  - value: Multicloud
+    description: Other (Multicloud)
+  - value: Networking
+    description: Application Networking
+  - value: Networking
+    description: Content Delivery
+  - value: Networking
+    description: Network Connectivity
+  - value: Networking
+    description: Network Infrastructure
+  - value: Networking
+    description: Network Routing
+  - value: Networking
+    description: Network Security
+  - value: Networking
+    description: Other (Networking)
+  - value: Security
+    description: Secret Management
+  - value: Security
+    description: Security Posture Management
+  - value: Security
+    description: Threat Detection and Response
+  - value: Security
+    description: Other (Security)
+  - value: Storage
+    description: Backup Storage
+  - value: Storage
+    description: Block Storage
+  - value: Storage
+    description: File Storage
+  - value: Storage
+    description: Object Storage
+  - value: Storage
+    description: Storage Platforms
+  - value: Storage
+    description: Other (Storage)
+  - value: Web
+    description: Application Platforms
+  - value: Web
+    description: Other (Web)
+  - value: Other
+    description: Other (Other)
   column_type: Dimension
   feature_level: Recommended
   allows_nulls: 'False'

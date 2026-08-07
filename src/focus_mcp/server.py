@@ -445,7 +445,10 @@ async def get_use_case(
         if not query_template:
             return {"error": f"Use case not found: {use_case_id}"}
 
-        # Build comprehensive query information
+        # The library is CC BY 4.0, which requires the attribution and a
+        # statement of whether the work was modified - and this is the
+        # tool that serves the SQL, so the statement belongs here.
+        adapted = " - adapted for DuckDB" if query_template.adapted else ""
         result = {
             "id": use_case_id,
             "name": query_template.name,
@@ -453,6 +456,7 @@ async def get_use_case(
             "sql": query_template.query,
             "focus_versions": query_template.focus_versions,
             "citation": query_template.citation,
+            "license": f"FOCUS use case library, CC BY 4.0{adapted}",
         }
 
         # Show parameter count from SQL

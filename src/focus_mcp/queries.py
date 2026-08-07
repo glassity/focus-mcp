@@ -178,64 +178,6 @@ class QueryLoader:
             query = self.queries.get(query_identifier.replace("-", "_"))
         return query
 
-    def list_queries(self) -> List[Dict[str, str]]:
-        """
-        List all available queries with basic metadata.
-
-        Returns:
-            List of dictionaries with query metadata for display
-        """
-        return [
-            {
-                'slug': query.slug,
-                'name': query.name,
-                'description': query.description or 'No description available',
-                'parameter_count': query.query.count('?'),
-                'versions': ', '.join(query.focus_versions)
-            }
-            for query in self.queries.values()
-        ]
-
-    def get_query_info(self, query: Query) -> str:
-        """
-        Generate comprehensive information about a query for the LLM.
-
-        This method creates a detailed description of the query that helps
-        the LLM understand what parameters are needed and how to use the query.
-
-        Args:
-            query: The Query object to describe
-
-        Returns:
-            Formatted string with complete query information
-        """
-        info = []
-        info.append(f"Query: {query.name}")
-
-        if query.description:
-            info.append(f"Description: {query.description}")
-
-        info.append(f"\nFOCUS Versions: {', '.join(query.focus_versions)}")
-
-        # Just show parameter count from SQL
-        param_count = query.query.count('?')
-        if param_count > 0:
-            info.append(f"\nParameters Required: {param_count}")
-
-        # Add SQL preview
-        sql_preview = query.query[:200] + "..." if len(query.query) > 200 else query.query
-        info.append("\nSQL Preview:")
-        info.append(sql_preview)
-
-        # Add source. The library is CC BY 4.0, which requires both the
-        # attribution and a statement of whether the work was modified.
-        if query.citation:
-            adapted = " - adapted for DuckDB" if query.adapted else ""
-            info.append(f"\nSource: {query.citation}")
-            info.append(f"(FOCUS use case library, CC BY 4.0{adapted})")
-
-        return "\n".join(info)
-
 
 # Global query loader instance
 # Initialized at module import to pre-load all available queries

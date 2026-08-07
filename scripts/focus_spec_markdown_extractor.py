@@ -7,12 +7,156 @@ definitions directly from the markdown source files. Much cleaner than HTML pars
 """
 
 import re
+import sys
 import yaml
 import subprocess
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
-from packaging.version import parse
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+# The predicate and the ordering the server uses at runtime, not copies of
+# them: a version boundary fixed in one place but not the other would let
+# the cached YAML be computed under different semantics than it is served.
+from focus_mcp.spec_loader import _available_at, _version_key  # noqa: E402
+
+MARKDOWN_LINK = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
+
+INTRODUCED_HEADING = re.compile(
+    # FOCUS 1.4 renamed this heading and started appending prose to the
+    # version ("1.3 Introduced as a replacement for ..."), so match both
+    # spellings and take only the version itself.
+    r'^## (?:Introduced \(version\)|Version Introduced)\s*\n'
+    r'\s*(\d+(?:\.\d+)*(?:-preview)?)',
+    re.MULTILINE,
+)
+
+
+def introduced_version(content: str) -> Optional[str]:
+    match = INTRODUCED_HEADING.search(content)
+    return match.group(1).strip() if match else None
+
+
+def clean_links(text: str) -> str:
+    """Replace markdown links with text an MCP client can actually use.
+
+    Internal anchors (#glossary:..., #attributes...) only resolve inside
+    the rendered specification, so just the text is kept; external URLs
+    are real references and stay, in parentheses.
+    """
+    def repl(match):
+        label, target = match.group(1), match.group(2)
+        if target.startswith("http"):
+            return f"{label} ({target})"
+        return label
+
+    return MARKDOWN_LINK.sub(repl, text)
+
+
+def section(content: str, *titles: str) -> str:
+    """The body of the first '## <title>' section that exists.
+
+    Sections run to the next '## ' heading or end of file. This exists
+    because a lazy regex with MULTILINE lets '$' match every line end,
+    which silently truncates a section to its first line - how attribute
+    requirements shipped as just their intro sentence.
+    """
+    for title in titles:
+        match = re.search(
+            rf'^## {re.escape(title)}\s*\n(.*?)(?=^## |\Z)',
+            content,
+            re.MULTILINE | re.DOTALL,
+        )
+        if match:
+            return match.group(1).strip()
+    return ""
+
+
+def requirement_items(body: str) -> List[str]:
+    """Requirement bullets as a list, nesting preserved inside each item.
+
+    Shapes across tags: v1.0 states requirements as prose paragraphs;
+    later versions use a boilerplate intro ("X MUST adhere to the
+    following requirements:") followed by bullets, sometimes nested two
+    levels deep. Top-level bullets and prose paragraphs each become one
+    item; nested bullets stay inside their parent, since a sub-requirement
+    is meaningless without it. The colon-terminated intro right before a
+    bullet list carries no information and is dropped.
+    """
+    items: List[str] = []
+    # A finished paragraph is held back rather than emitted, because
+    # whether it matters depends on what follows: a colon-terminated
+    # paragraph directly before a bullet is the list's intro and is
+    # dropped; before anything else it is a requirement in its own right.
+    pending: List[str] = []
+    paragraph: List[str] = []
+    # Top-level is relative to the list, not to column zero: a list may
+    # sit indented under a prose intro, and its first bullet sets the
+    # baseline the rest of that list is measured against.
+    base: List[int] = []
+
+    def close_paragraph():
+        if paragraph:
+            items.extend(pending)
+            pending[:] = [clean_links(" ".join(paragraph))]
+            paragraph.clear()
+            base.clear()
+
+    for raw in body.splitlines():
+        stripped = raw.strip()
+        if not stripped:
+            close_paragraph()
+            continue
+        marker = re.match(r'([*-])\s+', stripped)
+        if marker:
+            close_paragraph()
+            indent = len(raw) - len(raw.lstrip())
+            text = clean_links(stripped[marker.end():].strip())
+            if not base:
+                base.append(indent)
+            if indent <= base[0]:
+                if not (pending and pending[-1].endswith(":")):
+                    items.extend(pending)
+                pending.clear()
+                items.append(text)
+            else:
+                depth = max((indent - base[0]) // 2, 1)
+                items[-1] += "\n" + "  " * (depth - 1) + "- " + text
+            continue
+        paragraph.append(stripped)
+    close_paragraph()
+    items.extend(pending)
+    return items
+
+
+def allowed_values(content: str) -> List[Dict[str, str]]:
+    """The column's allowed-values table, if it declares one.
+
+    Newer tags put the table under an '## Allowed Values' heading; through
+    1.2 it sat inside Content Constraints behind an 'Allowed values:'
+    paragraph. Both shapes are read so retired columns keep theirs.
+    """
+    body = section(content, "Allowed Values")
+    if not body:
+        match = re.search(
+            r'^Allowed values:\s*\n(.*?)(?=^## |\Z)',
+            content,
+            re.MULTILINE | re.DOTALL,
+        )
+        body = match.group(1).strip() if match else ""
+
+    values = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2 or cells[0].lower() == "value" or set(cells[0]) <= set(":- "):
+            continue
+        values.append({
+            "value": clean_links(cells[0]),
+            "description": clean_links(cells[1]),
+        })
+    return values
 
 
 class FocusMarkdownExtractor:
@@ -27,8 +171,16 @@ class FocusMarkdownExtractor:
     # unioned, which is also what tells us when a column disappeared.
     TAGS = ["v1.0", "v1.1", "v1.2", "v1.3", "v1.4"]
 
+    # Anchored to this file, not the working directory: run from anywhere
+    # else, a relative default would silently write the refreshed YAML to
+    # a stray tree while the shipped resources stayed stale and green.
+    DEFAULT_CACHE_DIR = (
+        Path(__file__).resolve().parents[1]
+        / "src" / "focus_mcp" / "resources" / "specifications"
+    )
+
     def __init__(self, repo_dir: str = "/tmp/focus_repo",
-                 cache_dir: str = "src/focus_mcp/resources/specifications"):
+                 cache_dir: "str | Path" = DEFAULT_CACHE_DIR):
         """Initialize the extractor.
 
         Args:
@@ -49,6 +201,32 @@ class FocusMarkdownExtractor:
             print("Cloning FOCUS repository...")
             subprocess.run(["git", "clone", self.REPO_URL, str(self.repo_dir)],
                            check=True)
+        self._refuse_stale_tags()
+
+    def _refuse_stale_tags(self) -> None:
+        """Abort if the spec has released a version TAGS does not cover.
+
+        Running against stale TAGS exits green while columns.yaml never
+        learns the new version - and the fixtures would then build that
+        version's table from the previous release's column list.
+        """
+        listed = subprocess.run(
+            ["git", "tag", "-l", "v*"],
+            cwd=self.repo_dir, check=True, capture_output=True, text=True,
+        ).stdout.split()
+        releases = [t for t in listed if re.fullmatch(r"v\d+\.\d+", t)]
+        missing = sorted(
+            (t for t in releases
+             if t not in self.TAGS
+             and _version_key(t.lstrip("v")) > _version_key(self.TAGS[-1].lstrip("v"))),
+            key=lambda t: _version_key(t.lstrip("v")),
+        )
+        if missing:
+            raise SystemExit(
+                f"The FOCUS spec has released {', '.join(missing)} but TAGS "
+                f"stops at {self.TAGS[-1]}. Add the new tag(s) to TAGS, "
+                "re-run, and review what the new version changes."
+            )
 
     def checkout(self, tag: str) -> None:
         subprocess.run(["git", "checkout", "--quiet", tag],
@@ -57,10 +235,14 @@ class FocusMarkdownExtractor:
     def merge_versions(self, per_tag: Dict[str, List[Dict]], id_field: str) -> List[Dict]:
         """Union definitions seen across tags, oldest tag first.
 
-        The newest definition of an item wins, since later tags correct
-        earlier wording. An item present in one tag and absent from the
-        next was retired, and gets a removed_version so consumers can tell
-        which versions still have it.
+        The newest tag's file replaces the item wholesale, since later
+        tags correct earlier wording and may deliberately drop a field -
+        carrying old keys forward would serve retracted metadata as
+        current. The one field kept across tags is introduced_version,
+        because a later tag may stop declaring it. An item present in one
+        tag and absent from the next was retired, and gets a
+        removed_version so consumers can tell which versions still have
+        it.
         """
         merged: Dict[str, Dict] = {}
         first_seen: Dict[str, str] = {}
@@ -75,13 +257,21 @@ class FocusMarkdownExtractor:
                 seen.add(key)
                 first_seen.setdefault(key, version)
                 existing = merged.get(key, {})
-                # A later tag may drop the introduced version from the file;
-                # keep the earliest one we ever saw.
-                introduced = existing.get("introduced_version") or item.get("introduced_version")
-                merged[key] = {**existing, **item}
+                if "removed_version" in existing:
+                    # One [introduced, removed) interval cannot represent
+                    # an availability gap, so this ships wrong metadata
+                    # for the gap versions either way. Say so instead of
+                    # silently pretending it was always present.
+                    print(
+                        f"  WARNING: {key} reappears in {tag} after being "
+                        f"removed in {existing['removed_version']}; the gap "
+                        "is not representable and is dropped"
+                    )
+                merged[key] = dict(item)
+                introduced = (item.get("introduced_version")
+                              or existing.get("introduced_version"))
                 if introduced:
                     merged[key]["introduced_version"] = introduced
-                merged[key].pop("removed_version", None)
             for key, item in merged.items():
                 if key not in seen and "removed_version" not in item:
                     item["removed_version"] = version
@@ -94,7 +284,7 @@ class FocusMarkdownExtractor:
             appeared = first_seen[key]
             declared = item.get("introduced_version")
             if (appeared != earliest and declared
-                    and self._version_key(declared) < self._version_key(appeared)):
+                    and _version_key(declared) < _version_key(appeared)):
                 item["introduced_version"] = appeared
         return list(merged.values())
 
@@ -123,9 +313,13 @@ class FocusMarkdownExtractor:
             column['column_id'] = id_match.group(1).strip()
 
         # Extract Description
-        desc_match = re.search(r'^## Description\s*\n\s*(.+?)(?=\n##|\n\||$)', content, re.MULTILINE | re.DOTALL)
-        if desc_match:
-            column['description'] = ' '.join(desc_match.group(1).strip().split())
+        description = section(content, 'Description')
+        if description:
+            column['description'] = clean_links(' '.join(description.split()))
+
+        values = allowed_values(content)
+        if values:
+            column['allowed_values'] = values
 
         # Extract content constraints table
         constraints_match = re.search(r'\|.*Column type.*\|(.*?)\n\n', content, re.DOTALL)
@@ -147,22 +341,13 @@ class FocusMarkdownExtractor:
                         elif key == 'data_type':
                             column['data_type'] = value
                         elif key == 'value_format':
-                            # Clean up value format - remove markdown links
-                            value = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', value)
+                            value = clean_links(value)
                             if value and value != '<not specified>':
                                 column['value_format'] = value
 
-        # FOCUS 1.4 renamed this heading and started appending prose to the
-        # version ("1.3 Introduced as a replacement for ..."), so match both
-        # spellings and take only the version itself.
-        version_match = re.search(
-            r'^## (?:Introduced \(version\)|Version Introduced)\s*\n'
-            r'\s*(\d+(?:\.\d+)*(?:-preview)?)',
-            content,
-            re.MULTILINE,
-        )
-        if version_match:
-            column['introduced_version'] = version_match.group(1).strip()
+        introduced = introduced_version(content)
+        if introduced:
+            column['introduced_version'] = introduced
 
         return column
 
@@ -187,30 +372,18 @@ class FocusMarkdownExtractor:
             attribute['attribute_id'] = title_match.group(1).lower().replace(' ', '_').replace('/', '_')
 
         # Extract Description section
-        desc_match = re.search(r'^## Description\s*\n\s*(.+?)(?=\n##|$)', content, re.MULTILINE | re.DOTALL)
-        if desc_match:
-            attribute['description'] = ' '.join(desc_match.group(1).strip().split())
+        description = section(content, 'Description')
+        if description:
+            attribute['description'] = clean_links(' '.join(description.split()))
 
         # Extract Requirements section
-        req_match = re.search(r'^## Requirements\s*\n\s*(.+?)(?=\n##|$)', content, re.MULTILINE | re.DOTALL)
-        if req_match:
-            req_text = req_match.group(1).strip()
-            # Just add the entire requirements section as a single item
-            # This preserves the full structure including nested bullets
-            if req_text:
-                attribute['requirements'] = [req_text]
+        requirements = requirement_items(section(content, 'Requirements'))
+        if requirements:
+            attribute['requirements'] = requirements
 
-        # FOCUS 1.4 renamed this heading and started appending prose to the
-        # version ("1.3 Introduced as a replacement for ..."), so match both
-        # spellings and take only the version itself.
-        version_match = re.search(
-            r'^## (?:Introduced \(version\)|Version Introduced)\s*\n'
-            r'\s*(\d+(?:\.\d+)*(?:-preview)?)',
-            content,
-            re.MULTILINE,
-        )
-        if version_match:
-            attribute['introduced_version'] = version_match.group(1).strip()
+        introduced = introduced_version(content)
+        if introduced:
+            attribute['introduced_version'] = introduced
 
         return attribute
 
@@ -262,15 +435,12 @@ class FocusMarkdownExtractor:
 
         return attributes
 
-    @staticmethod
-    def _version_key(version: str):
-        return parse(version.replace('-preview', 'a0'))
-
     def organize_by_version(self, items: List[Dict]) -> Dict[str, List[Dict]]:
         """Group items by the spec version they are first available in.
 
         Versions are taken from the data, so a new spec release needs no
-        edit here.
+        edit here; availability comes from the same predicate the server
+        uses at runtime.
 
         Args:
             items: List of columns or attributes with 'introduced_version'
@@ -280,18 +450,10 @@ class FocusMarkdownExtractor:
         """
         versions = sorted(
             {i.get('introduced_version', '') for i in items} - {''},
-            key=self._version_key,
+            key=_version_key,
         )
-        def available_at(item, target):
-            if not item.get('introduced_version'):
-                return False
-            if self._version_key(item['introduced_version']) > self._version_key(target):
-                return False
-            removed = item.get('removed_version')
-            return not removed or self._version_key(removed) > self._version_key(target)
-
         return {
-            target: [i for i in items if available_at(i, target)]
+            target: [i for i in items if _available_at(i, target)]
             for target in versions
         }
 
