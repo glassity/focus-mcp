@@ -10,7 +10,7 @@
 <p align="center">
   <a href="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml"><img src="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml/badge.svg" alt="Docker build"></a>
   <a href="https://hub.docker.com/r/glassity/focus-mcp"><img src="https://img.shields.io/docker/pulls/glassity/focus-mcp?color=0EA0BE" alt="Docker pulls"></a>
-  <a href="https://pypi.org/project/focus-mcp/"><img src="https://img.shields.io/pypi/v/focus-mcp?color=0EA0BE" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/focus-mcp/"><img src="https://img.shields.io/pypi/v/focus-mcp?color=0EA0BE&cacheSeconds=1800" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-1E1839" alt="License: Apache-2.0"></a>
 </p>
