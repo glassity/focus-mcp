@@ -55,7 +55,7 @@ providers.
 
 Each provider has an official export path:
 
-- AWS: [FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/) (Data Exports → FOCUS 1.0)
+- AWS: [FOCUS setup guide for AWS](https://focus.finops.org/get-started/aws/) (Data Exports → FOCUS 1.0 or 1.2)
 - Microsoft Azure: [FOCUS setup guide for Microsoft](https://focus.finops.org/get-started/microsoft/)
 - Google Cloud: [FOCUS setup guide for Google Cloud](https://focus.finops.org/get-started/google-cloud/), or see [GCS + BigQuery](#google-cloud-gcs--bigquery-focus-export) below
 - Other providers: [all FOCUS setup guides](https://focus.finops.org/get-started/)
@@ -163,7 +163,7 @@ Run the service costs by region analysis for the last 3 months.
 Show me the top 10 most expensive services across all accounts.
 Find unused capacity reservations I can optimize.
 Compare costs across providers and regions.
-What columns are available in FOCUS v1.2?
+What columns are available in FOCUS v1.4?
 ```
 
 ## Tools
@@ -200,10 +200,15 @@ citation back to its source page:
 - FOCUS v1.0: 36 queries
 - FOCUS v1.1: 41 queries
 - FOCUS v1.2: 53 queries
+- FOCUS v1.3: 58 queries
+- FOCUS v1.4: 66 queries
 
 Coverage includes cost allocation, commitment discount tracking, anomaly
 detection, budget reconciliation, and provider comparison. `FOCUS_VERSION`
-selects which set is active.
+selects which set is active; match it to what your provider exports. The
+specification runs ahead of the exports - AWS Data Exports currently
+delivers FOCUS 1.0 and 1.2 - so the 1.3 and 1.4 collections are ready for
+the day a provider ships them.
 
 ## Data locations
 
@@ -357,7 +362,8 @@ opening a pull request.
   use-case pages land here without manual extraction
 - Richer response formatting: citations and educational context inline in
   query results
-- Validation of every use-case query against real v1.1 and v1.2 exports
+- Validation of every use-case query against real provider exports (AWS
+  ships FOCUS 1.0 and 1.2 today; 1.3+ as providers adopt them)
 - Evaluate moving column and attribute definitions to MCP resources
 - Surface conformance-gap notes from the spec in tool responses
 
