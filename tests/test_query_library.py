@@ -13,15 +13,34 @@ from pathlib import Path
 
 import pytest
 import yaml
+from packaging.version import InvalidVersion, parse
 
 QUERIES = Path(__file__).resolve().parent.parent / "src" / "focus_mcp" / "resources" / "queries"
 CURATED = QUERIES / "curated"
 UPSTREAM = QUERIES / "upstream"
 
+
+def _versions() -> list:
+    # Sorted as versions, not as strings: a lexicographic sort would put
+    # a future 1.10 between 1.1 and 1.2, and the drift check below
+    # compares adjacent pairs, so the order is load-bearing.
+    if not CURATED.is_dir():
+        return []
+    found = []
+    for entry in CURATED.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            found.append((parse(entry.name), entry.name))
+        except InvalidVersion:
+            continue
+    return [name for _, name in sorted(found)]
+
+
 # Derived from the same tree the collections are read from. Taking it from
 # the installed package instead would let these checks iterate empty
 # directories and report green - the baselines are repo-only.
-VERSIONS = sorted(p.name for p in CURATED.iterdir() if p.is_dir()) if CURATED.is_dir() else []
+VERSIONS = _versions()
 
 # Fields we own rather than mirror from upstream.
 LOCAL_ONLY = {"fix_comment", "divergence_note"}
@@ -47,6 +66,31 @@ def mirrored(entry: dict) -> dict:
 
 def test_there_is_at_least_one_collection():
     assert VERSIONS, f"no curated collections under {CURATED}"
+
+
+def test_renames_match_what_the_specification_records():
+    # RENAMES is hand-maintained; columns.yaml records both halves of a
+    # rename machine-readably. Tying them together means the next rename
+    # cannot be half-encoded: normalising a pair the spec never treated
+    # as successor and predecessor would hide real drift as a rename.
+    from focus_mcp.spec_loader import _version_key
+
+    columns_file = (QUERIES.parent / "specifications" / "columns.yaml")
+    columns = {c["column_id"]: c for c in yaml.safe_load(columns_file.read_text())}
+    for current, former in RENAMES.items():
+        assert current in columns and former in columns, (current, former)
+        removed = columns[former].get("removed_version")
+        introduced = columns[current].get("introduced_version")
+        # A successor arrives no later than its predecessor leaves - the
+        # spec deprecates with overlap (ProviderName lingered through 1.3
+        # beside ServiceProviderName) rather than swapping in place.
+        assert removed and introduced and (
+            _version_key(introduced) <= _version_key(removed)
+        ), (
+            f"RENAMES says {former} became {current}, but the spec records "
+            f"{former} removed in {removed} and {current} introduced in "
+            f"{introduced} - not a succession"
+        )
 
 
 def test_every_collection_has_a_baseline_to_compare_against():
