@@ -1,7 +1,7 @@
 """Tests for get_db_connection with local data.
 
 IMPORTANT patching note: FOCUS_DATA_LOCATION is read from the environment
-at import time (focus_config.py) and copied into
+at import time (config.py) and copied into
 focus_mcp_server.DATA_LOCATION at import time. monkeypatch.setenv would
 therefore silently test nothing — tests must setattr the module global
 and reset the connection singleton.
@@ -13,7 +13,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-import focus_mcp_server
+from focus_mcp import server as focus_mcp_server
 
 BUNDLED_SAMPLE = Path(__file__).resolve().parent.parent / "data/aws-focus-export"
 

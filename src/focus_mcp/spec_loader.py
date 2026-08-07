@@ -5,22 +5,26 @@ FOCUS Specification Loader - Loads FOCUS specification data from YAML files.
 Provides access to FOCUS column and attribute definitions with version filtering.
 """
 
+import sys
 import yaml
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from packaging.version import parse
+from .paths import resource_path
 
 
 class FocusSpecLoader:
     """Loader for FOCUS specification data from YAML files."""
 
-    def __init__(self, spec_dir: str = "resources/specifications"):
+    def __init__(self, spec_dir: str | None = None):
         """Initialize loader and load specification data.
 
         Args:
-            spec_dir: Directory containing columns.yaml and attributes.yaml
+            spec_dir: Directory containing columns.yaml and attributes.yaml.
+                Defaults to the specifications that ship inside the package.
+                Tests and the scripts/ extractors pass a checkout directory.
         """
-        spec_path = Path(spec_dir)
+        spec_path = Path(spec_dir) if spec_dir is not None else resource_path("specifications")
 
         # Load data files with graceful degradation
         columns_file = spec_path / "columns.yaml"
@@ -35,27 +39,27 @@ class FocusSpecLoader:
             try:
                 with open(columns_file, 'r') as f:
                     self.columns = yaml.safe_load(f) or []
-                print(f"Loaded {len(self.columns)} column definitions from {columns_file}")
+                print(f"Loaded {len(self.columns)} column definitions from {columns_file}", file=sys.stderr)
             except Exception as e:
-                print(f"Warning: Failed to load columns from {columns_file}: {e}")
+                print(f"Warning: Failed to load columns from {columns_file}: {e}", file=sys.stderr)
                 self.columns = []
         else:
-            print(f"Warning: Column definitions not found at {columns_file}")
-            print("FOCUS column metadata will not be available.")
-            print("To generate specification files, run: python scripts/focus_spec_markdown_extractor.py")
+            print(f"Warning: Column definitions not found at {columns_file}", file=sys.stderr)
+            print("FOCUS column metadata will not be available.", file=sys.stderr)
+            print("To generate specification files, run: python scripts/focus_spec_markdown_extractor.py", file=sys.stderr)
 
         # Try to load attributes
         if attributes_file.exists():
             try:
                 with open(attributes_file, 'r') as f:
                     self.attributes = yaml.safe_load(f) or []
-                print(f"Loaded {len(self.attributes)} attribute definitions from {attributes_file}")
+                print(f"Loaded {len(self.attributes)} attribute definitions from {attributes_file}", file=sys.stderr)
             except Exception as e:
-                print(f"Warning: Failed to load attributes from {attributes_file}: {e}")
+                print(f"Warning: Failed to load attributes from {attributes_file}: {e}", file=sys.stderr)
                 self.attributes = []
         else:
-            print(f"Warning: Attribute definitions not found at {attributes_file}")
-            print("FOCUS attribute metadata will not be available.")
+            print(f"Warning: Attribute definitions not found at {attributes_file}", file=sys.stderr)
+            print("FOCUS attribute metadata will not be available.", file=sys.stderr)
 
     def get_columns(self,
                    version: Optional[str] = None,

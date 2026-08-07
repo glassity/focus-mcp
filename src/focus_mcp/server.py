@@ -26,11 +26,11 @@ from pydantic import Field
 import duckdb
 from mcp.server.fastmcp import FastMCP
 
-import focus_config
-from data_loading import create_focus_view
-from focus_queries import focus_queries
-from focus_spec_loader import FocusSpecLoader
-from storage_backends import resolve_backend
+from . import config
+from .data_loading import create_focus_view
+from .queries import focus_queries
+from .spec_loader import FocusSpecLoader
+from .storage_backends import resolve_backend
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +129,8 @@ mcp = FastMCP(
     """,
 )
 
-# Configuration - Load from environment variables via focus_config
-DATA_LOCATION = focus_config.DATA_LOCATION
+# Configuration - Load from environment variables via focus_mcp.config
+DATA_LOCATION = config.DATA_LOCATION
 
 # Global database connection - Singleton pattern for performance
 # DuckDB connections are thread-safe and expensive to create, so we reuse one instance
@@ -294,7 +294,10 @@ async def get_data_info() -> dict[str, Any]:
             return {
                 "result": {
                     "status": "no_data",
-                    "message": "No FOCUS data loaded. Set FOCUS_DATA_LOCATION environment variable.",
+                    "message": (
+                        f"No FOCUS data found at {DATA_LOCATION}. Set FOCUS_DATA_LOCATION "
+                        "to the directory or bucket URI holding your FOCUS export."
+                    ),
                     "data_location": DATA_LOCATION,
                 }
             }
@@ -617,7 +620,7 @@ async def list_columns(
 
         # Use configured version if not specified
         if not version:
-            version = focus_config.FOCUS_VERSION
+            version = config.FOCUS_VERSION
 
         # Ensure version is a string without 'v' prefix
         version = str(version).lstrip('v')
@@ -705,7 +708,7 @@ async def get_column_details(
 
         # Use configured version if not specified
         if not version:
-            version = focus_config.FOCUS_VERSION
+            version = config.FOCUS_VERSION
 
         version = str(version).lstrip('v')
 
@@ -760,7 +763,7 @@ async def list_attributes(
 
         # Use configured version if not specified
         if not version:
-            version = focus_config.FOCUS_VERSION
+            version = config.FOCUS_VERSION
 
         version = str(version).lstrip('v')
 
@@ -831,7 +834,7 @@ async def get_attribute_details(
 
         # Use configured version if not specified
         if not version:
-            version = focus_config.FOCUS_VERSION
+            version = config.FOCUS_VERSION
 
         version = str(version).lstrip('v')
 

@@ -16,11 +16,12 @@ The query library provides:
 - Source attribution for all queries
 """
 
+import sys
 import yaml
-from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
-import focus_config
+from . import config
+from .paths import resource_path
 
 
 @dataclass
@@ -81,21 +82,20 @@ class QueryLoader:
         This approach provides version-specific query sets while maintaining
         all metadata from the focus.finops.org website.
         """
-        # Find the YAML files in resources/queries
-        package_dir = Path(__file__).parent
-        yaml_file = package_dir / "resources" / "queries" / "focus_use_cases.yaml"
-        adjustments_file = package_dir / "resources" / "queries" / "focus_use_cases_adjustments.yaml"
+        # Find the YAML files that ship inside the package
+        yaml_file = resource_path("queries", "focus_use_cases.yaml")
+        adjustments_file = resource_path("queries", "focus_use_cases_adjustments.yaml")
 
         if not yaml_file.exists():
-            print(f"Warning: Query file {yaml_file} does not exist")
-            print("Run 'python scrape_to_yaml.py' to generate it")
+            print(f"Warning: Query file {yaml_file} does not exist", file=sys.stderr)
+            print("Run 'python scrape_to_yaml.py' to generate it", file=sys.stderr)
             return
 
         try:
             with open(yaml_file, 'r', encoding='utf-8') as f:
                 all_queries = yaml.safe_load(f)
         except Exception as e:
-            print(f"Error loading queries from {yaml_file}: {e}")
+            print(f"Error loading queries from {yaml_file}: {e}", file=sys.stderr)
             return
 
         # Load adjustments if file exists
@@ -103,13 +103,13 @@ class QueryLoader:
             try:
                 with open(adjustments_file, 'r', encoding='utf-8') as f:
                     self.adjustments = yaml.safe_load(f) or {}
-                print(f"Loaded {len(self.adjustments)} query adjustments")
+                print(f"Loaded {len(self.adjustments)} query adjustments", file=sys.stderr)
             except Exception as e:
-                print(f"Error loading adjustments from {adjustments_file}: {e}")
+                print(f"Error loading adjustments from {adjustments_file}: {e}", file=sys.stderr)
                 self.adjustments = {}
 
         # Normalize the configured version (e.g., "1.0" -> "v1.0")
-        configured_version = f"v{focus_config.FOCUS_VERSION}"
+        configured_version = f"v{config.FOCUS_VERSION}"
 
         # Process each query
         for key, query_data in all_queries.items():
@@ -139,7 +139,7 @@ class QueryLoader:
             # Index by slug (key)
             self.queries[key] = query
 
-        print(f"Loaded {len(self.queries)} queries for FOCUS {focus_config.FOCUS_VERSION}")
+        print(f"Loaded {len(self.queries)} queries for FOCUS {config.FOCUS_VERSION}", file=sys.stderr)
 
     def get_query(self, query_identifier: str) -> Optional[Query]:
         """

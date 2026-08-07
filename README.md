@@ -10,6 +10,7 @@
 <p align="center">
   <a href="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml"><img src="https://github.com/glassity/focus-mcp/actions/workflows/docker-publish.yml/badge.svg" alt="Docker build"></a>
   <a href="https://hub.docker.com/r/glassity/focus-mcp"><img src="https://img.shields.io/docker/pulls/glassity/focus-mcp?color=0EA0BE" alt="Docker pulls"></a>
+  <a href="https://pypi.org/project/focus-mcp/"><img src="https://img.shields.io/pypi/v/focus-mcp?color=0EA0BE" alt="PyPI version"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-1E1839" alt="License: Apache-2.0"></a>
 </p>
@@ -68,6 +69,41 @@ The server reads Parquet with Hive partitioning:
 ```
 
 ### 2. Run the server
+
+The quickest path needs no container. `uvx` fetches and runs the published
+package in one step:
+
+```bash
+claude mcp add focus -e FOCUS_DATA_LOCATION=/path/to/your/focus/data -- uvx focus-mcp
+```
+
+For Claude Desktop, add this to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "focus": {
+      "command": "uvx",
+      "args": ["focus-mcp"],
+      "env": {
+        "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
+        "FOCUS_VERSION": "1.0"
+      }
+    }
+  }
+}
+```
+
+Reading GCS with Application Default Credentials needs the `gcs` extra, which
+uvx installs when you name it:
+
+```bash
+claude mcp add focus -e FOCUS_DATA_LOCATION=gs://your-bucket/focus \
+  -- uvx --from 'focus-mcp[gcs]' focus-mcp
+```
+
+Docker remains available and is the better fit when you want a pinned,
+attested image:
 
 Images are published to Docker Hub and GitHub Container Registry on every
 release:
@@ -275,12 +311,11 @@ inside the server process and are never exposed to MCP clients.
 git clone https://github.com/glassity/focus-mcp.git
 cd focus-mcp
 
-uv sync                 # install (uv recommended)
+uv sync                 # install, including dev tools
 uv sync --extra gcs     # + GCS ADC support
-uv sync --extra dev     # + ruff, mypy, black
 
 export FOCUS_DATA_LOCATION="/path/to/your/focus/data"
-uv run python focus_mcp_server.py
+uv run focus-mcp
 ```
 
 Point a client at the source checkout instead of the Docker image:
@@ -290,7 +325,7 @@ Point a client at the source checkout instead of the Docker image:
   "mcpServers": {
     "focus": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/focus-mcp", "python", "focus_mcp_server.py"],
+      "args": ["run", "--directory", "/path/to/focus-mcp", "focus-mcp"],
       "env": {
         "FOCUS_DATA_LOCATION": "/path/to/your/focus/data",
         "FOCUS_VERSION": "1.0"

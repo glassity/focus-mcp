@@ -1,0 +1,55 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # Escape hatch when a tag push does not trigger a run: the version check
+  # below fails closed unless this is dispatched with --ref <release tag>.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write  # mandatory for trusted publishing
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      # Without this, tagging v0.3.0 against an unbumped pyproject republishes 0.2.0.
+      - name: Check the tag matches the project version
+        run: |
+          version=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match pyproject version $version"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build distributions
+        run: uv build
+
+      # PyPI versions cannot be replaced, and the publish step uploads everything
+      # in dist/, so both the wheel and the sdist are checked before it runs.
+      - name: Verify the distributions
+        run: |
+          for dist in dist/*; do
+            uv run python scripts/verify_package.py "$dist"
+          done
+
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1

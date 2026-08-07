@@ -74,3 +74,4 @@ dmypy.json
 # Scripts folder (exclude contents but keep folder)
 scripts/*
 !scripts/.keep
+!scripts/verify_package.py

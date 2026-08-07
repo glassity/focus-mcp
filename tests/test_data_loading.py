@@ -14,7 +14,7 @@ import json
 import duckdb
 import pytest
 
-from data_loading import (
+from focus_mcp.data_loading import (
     collect_data_files,
     create_focus_view,
     discover_manifests,
