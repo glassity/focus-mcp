@@ -2,8 +2,8 @@
 """Prove a built wheel or sdist installs clean and serves MCP from a foreign directory.
 
 Usage:
-    uv run python scripts/verify_package.py dist/focus_mcp-0.2.0-py3-none-any.whl
-    uv run python scripts/verify_package.py dist/focus_mcp-0.2.0.tar.gz
+    uv run python scripts/verify_package.py dist/focus_mcp-0.3.0-py3-none-any.whl
+    uv run python scripts/verify_package.py dist/focus_mcp-0.3.0.tar.gz
 
 Accepts either a wheel (.whl) or an sdist (.tar.gz). Checks, in order:
   1. For a wheel only: it contains exactly one top-level package and no repo
