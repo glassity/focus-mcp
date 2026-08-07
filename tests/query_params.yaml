@@ -1,0 +1,180 @@
+# Parameter fixtures for executing each use-case query in tests.
+#
+# One entry per query key, holding the positional arguments its ? placeholders
+# take. Dates sit inside the window the synthetic fixture rows are seeded into
+# (see tests/focus_fixtures.py) so queries return rows rather than trivially
+# matching nothing.
+
+understand_the_billing_account_or_sub_account_entity:
+- '2025-05-01'
+- '2025-09-30'
+identify_sources_of_billed_cost:
+- '2025-05-01'
+- '2025-09-30'
+analyze_credit_memos:
+- '2025-05-01'
+- '2025-09-30'
+verify_accuracy_of_provider_invoices_aka_invoice_reconciliation:
+- '2025-05-01'
+- '2025-09-30'
+calculate_average_rate_of_a_component_resource:
+- '2025-05-01'
+- '2025-09-30'
+quantify_usage_of_a_component_resource:
+- '2025-05-01'
+- '2025-09-30'
+calculate_unit_economics: []
+calculate_consumption_of_virtual_currency_within_a_billing_period:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+determine_target_of_virtual_currency_usage:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+analyze_effective_cost_by_pricing_currency:
+- '2025-05-01'
+- '2025-09-30'
+analyze_purchase_of_virtual_currency:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+determine_contracted_savings_by_virtual_currency:
+- '2025-05-01'
+- '2025-09-30'
+analyze_tag_coverage:
+- Environment
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+analyze_the_different_metered_costs_for_a_particular_sku:
+- '2025-05-01'
+- '2025-09-30'
+report_costs_by_service_category_and_subcategory:
+- '2025-05-01'
+- '2025-09-30'
+analyze_capacity_reservations_on_compute_costs:
+- '2025-05-01'
+- '2025-09-30'
+identify_unused_capacity_reservations:
+- '2025-05-01'
+- '2025-09-30'
+corrections_by_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+recurring_commitment_charges:
+- '2025-05-01'
+- '2025-09-30'
+costs_service_name:
+- '2025-05-01'
+- '2025-09-30'
+- EC2
+report_spending_across_billing_periods_by_service_category:
+- '2025-05-01'
+- '2025-09-30'
+- AWS
+analyze_service_costs_by_region:
+- '2025-05-01'
+- '2025-09-30'
+report_service_costs_by_providers_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+- EC2
+- '123456789012'
+service_costs_month_over_month:
+- '2025-05-01'
+- '2025-09-30'
+application_cost:
+- '2025-05-01'
+- '2025-09-30'
+- WebApp
+resource_component_costs:
+- '2025-05-01'
+- '2025-09-30'
+- i-1234567890abcdef0
+costs_service_category:
+- '2025-05-01'
+- '2025-09-30'
+report_corrections:
+- '2025-05-01'
+- '2025-09-30'
+effective_cost_compute:
+- '2025-05-01'
+- '2025-09-30'
+commitment_discount_purchases:
+- '2025-05-01'
+- '2025-09-30'
+effective_savings_rate_services:
+- '2025-05-01'
+- '2025-09-30'
+effective_savings_rate:
+- '2025-05-01'
+- '2025-09-30'
+resource_costs_sku:
+- '2025-05-01'
+- '2025-09-30'
+marketplace_vendors_costs:
+- '2025-05-01'
+- '2025-09-30'
+cost_compute_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+- '123456789012'
+costs_by_availability_zone:
+- '2025-05-01'
+- '2025-09-30'
+- '123456789012'
+daily_anomaly_services:
+- '2025-05-01'
+- '2025-09-30'
+daily_anomaly_region:
+- '2025-05-01'
+- '2025-09-30'
+daily_anomaly_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+update_application_budgets:
+- '2025-05-01'
+- '2025-09-30'
+update_budgets:
+- '2025-05-01'
+- '2025-09-30'
+report_subaccount_regions:
+- '2025-05-01'
+- '2025-09-30'
+forecast_costs:
+- '2025-05-01'
+- '2025-09-30'
+forecast_cashflow:
+- '2025-05-01'
+- '2025-09-30'
+forecast_amortized_costs:
+- '2025-05-01'
+- '2025-09-30'
+verify_discounts_applied:
+- '2025-05-01'
+- '2025-09-30'
+verify_service_charges:
+- '2025-05-01'
+- '2025-09-30'
+verify_invoices:
+- '2025-05-01'
+- '2025-09-30'
+compare_usage_month_over_month:
+- '2025-05-01'
+- '2025-09-30'
+service_costs_subaccount:
+- '2025-05-01'
+- '2025-09-30'
+- '123456789012'
+identify_unused_commitments:
+- '2025-05-01'
+- '2025-09-30'
+allocate_application_multi_currency:
+- '2025-05-01'
+- '2025-09-30'
+compare_billed_budget:
+- '2025-05-01'
+- '2025-09-30'
+- '123456789012'
+- 10000
