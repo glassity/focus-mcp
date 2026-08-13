@@ -386,4 +386,6 @@ Apache-2.0. Copyright Glassity. See [LICENSE](LICENSE).
 <p align="center">
   Built by <a href="https://glassity.cloud/?utm_source=focus-mcp&utm_medium=readme&utm_content=footer">Glassity</a>, cloud cost
   visibility and optimization for AWS.
+  <br>
+  <a href="https://app.glassity.cloud/users/sign_in?utm_source=github&utm_medium=referral&utm_campaign=focus-mcp">Try Glassity</a> on your own AWS bill.
 </p>
