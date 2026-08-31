@@ -347,12 +347,24 @@ so protocol 2026-07-28 clients mirror them into `Mcp-Param-Dataset` and
 dataset without parsing the body. Older clients still work; the values just
 travel in the body only.
 
-To require a bearer token, point `FOCUS_JWKS_URL` at your identity
-provider's JWKS (install the `auth` extra: `uvx --from 'focus-mcp[auth]'
-focus-mcp`). `FOCUS_OIDC_ISSUER` pins the expected issuer and publishes it in
-the protected-resource metadata clients use to discover where to get a
-token; `FOCUS_RESOURCE_URL` is this server's own URL, the audience a token
-must name.
+Two ways to require a bearer token:
+
+- `FOCUS_JWKS_URL`: tokens are JWTs and verified here against your identity
+  provider's keys (install the `auth` extra: `uvx --from 'focus-mcp[auth]'
+  focus-mcp`). `FOCUS_OIDC_ISSUER` pins the expected issuer.
+- `FOCUS_CATALOG_URL` alone: tokens are opaque to this server; a bearer is
+  required and forwarded, and the catalog is the authority on what it may
+  read (a `401`/`403` from the catalog becomes a tool error).
+
+In both modes `FOCUS_RESOURCE_URL` is this server's public URL — the
+audience tokens must name, and what the protected-resource metadata at
+`/.well-known/oauth-protected-resource/mcp` advertises. It defaults to the
+bind address, so set it behind a proxy.
+
+Clients mirror `dataset`/`focus_version` into headers only after they have
+seen the tool schema: a `tools/call` sent before any `tools/list` is
+rejected by the server as a header/body mismatch (`-32020`), and the client
+is expected to list and retry.
 
 ## Configuration
 

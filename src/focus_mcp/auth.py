@@ -1,12 +1,17 @@
-"""Bearer-token verification for the HTTP transport.
+"""Bearer-token handling for the HTTP transport.
 
-Tokens are JWTs signed by an OpenID Connect provider; verification only
-needs the provider's JWKS, so the server holds no secret. A verified token
-is what the dataset catalog receives, which is how one shared server serves
-many tenants: the catalog answers for the token's owner, not for whoever
-typed the dataset name.
+Two modes:
 
-Requires the auth extra (pip install 'focus-mcp[auth]').
+- JWKS: tokens are JWTs signed by an OpenID Connect provider and verified
+  here, needing only the provider's public keys (auth extra, PyJWT).
+- Catalog: the server itself cannot tell a good token from a bad one (the
+  issuer's tokens are opaque); it requires a bearer and hands it to the
+  dataset catalog, which is the authority on what the token may read. A
+  request with no token never reaches a tool.
+
+Either way the token is what the catalog receives, which is how one shared
+server serves many tenants: the catalog answers for the token's owner, not
+for whoever typed the dataset name.
 """
 
 import logging
@@ -92,3 +97,12 @@ def _scopes(claims: dict) -> list[str]:
     if isinstance(scp, list):
         return [str(s) for s in scp]
     return []
+
+
+class CatalogTokenVerifier:
+    """Accept any bearer as far as the transport is concerned; the catalog decides."""
+
+    async def verify_token(self, token: str) -> Optional[AccessToken]:
+        if not token.strip():
+            return None
+        return AccessToken(token=token, client_id="catalog", scopes=[])

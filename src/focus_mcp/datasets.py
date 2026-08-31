@@ -70,21 +70,24 @@ def looks_like_location(value: str) -> bool:
 class Catalog:
     """Resolves dataset handles for the running process."""
 
+    # Configuration is read when the catalog is built, not when this module
+    # is imported, so a process that reconfigures and rebuilds sees its
+    # current environment.
     def __init__(
         self,
         *,
-        default_location: str = config.DATA_LOCATION,
-        default_version: str = config.FOCUS_VERSION,
+        default_location: Optional[str] = None,
+        default_version: Optional[str] = None,
         datasets: Optional[dict[str, dict[str, str]]] = None,
-        catalog_url: str = config.CATALOG_URL,
-        allow_raw_locations: bool = config.ALLOW_RAW_LOCATIONS,
+        catalog_url: Optional[str] = None,
+        allow_raw_locations: Optional[bool] = None,
         http_client=None,
     ):
-        self.default_location = default_location
-        self.default_version = default_version
+        self.default_location = config.DATA_LOCATION if default_location is None else default_location
+        self.default_version = config.FOCUS_VERSION if default_version is None else default_version
         self.datasets = dict(config.DATASETS if datasets is None else datasets)
-        self.catalog_url = catalog_url.rstrip("/")
-        self.allow_raw_locations = allow_raw_locations
+        self.catalog_url = (config.CATALOG_URL if catalog_url is None else catalog_url).rstrip("/")
+        self.allow_raw_locations = config.ALLOW_RAW_LOCATIONS if allow_raw_locations is None else allow_raw_locations
         self._http_client = http_client
         self._remote_cache: dict[tuple[str, str], tuple[float, Dataset]] = {}
 
@@ -178,8 +181,8 @@ class Connection:
 class ConnectionPool:
     """One prepared DuckDB connection per location, least recently used evicted."""
 
-    def __init__(self, max_size: int = config.MAX_DATASETS):
-        self.max_size = max(1, max_size)
+    def __init__(self, max_size: Optional[int] = None):
+        self.max_size = max(1, config.MAX_DATASETS if max_size is None else max_size)
         self._entries: "OrderedDict[str, Connection]" = OrderedDict()
         self._lock = threading.Lock()
 

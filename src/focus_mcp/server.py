@@ -22,6 +22,7 @@ Architecture:
 
 import logging
 from typing import Annotated, Any, Optional
+from urllib.parse import urlsplit
 from pydantic import Field
 import duckdb
 from mcp.server.auth.middleware.auth_context import get_access_token
@@ -37,26 +38,49 @@ logger = logging.getLogger(__name__)
 
 
 def _auth_kwargs() -> dict[str, Any]:
-    """Bearer-token verification for the HTTP transport, when configured."""
-    if not config.JWKS_URL:
-        return {}
-    from .auth import JwksTokenVerifier
+    """Bearer-token handling for the HTTP transport, when configured.
 
-    kwargs: dict[str, Any] = {
-        "token_verifier": JwksTokenVerifier(
+    A JWKS URL means tokens are verified here. A catalog URL alone means the
+    token is merely required and forwarded: the catalog is the authority.
+    The SDK insists on auth settings alongside a verifier, and the issuer it
+    publishes in the protected-resource metadata is where clients go for a
+    token, so the catalog's origin stands in when no issuer is configured.
+    """
+    if config.JWKS_URL:
+        from .auth import JwksTokenVerifier
+
+        verifier = JwksTokenVerifier(
             config.JWKS_URL,
             issuer=config.OIDC_ISSUER,
             audience=config.RESOURCE_URL,
             required_scopes=config.REQUIRED_SCOPES,
         )
-    }
-    if config.OIDC_ISSUER:
-        kwargs["auth"] = AuthSettings(
-            issuer_url=config.OIDC_ISSUER,
-            resource_server_url=config.RESOURCE_URL or None,
+        issuer = config.OIDC_ISSUER or _origin(config.JWKS_URL)
+    elif config.CATALOG_URL:
+        from .auth import CatalogTokenVerifier
+
+        verifier = CatalogTokenVerifier()
+        issuer = config.OIDC_ISSUER or _origin(config.CATALOG_URL)
+    else:
+        return {}
+
+    # Without a resource URL the SDK publishes no protected-resource
+    # metadata and, with it, installs no bearer check at all - so the bind
+    # address stands in when the public URL is not configured.
+    resource_url = config.RESOURCE_URL or f"http://{config.HTTP_HOST}:{config.HTTP_PORT}/mcp"
+    return {
+        "token_verifier": verifier,
+        "auth": AuthSettings(
+            issuer_url=issuer,
+            resource_server_url=resource_url,
             required_scopes=config.REQUIRED_SCOPES or None,
-        )
-    return kwargs
+        ),
+    }
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 # Initialize MCP server with FOCUS-specific instructions
@@ -158,6 +182,7 @@ mcp = MCPServer(
     - For service names, query: SELECT DISTINCT ServiceName FROM focus_data_table
     - For valid SubAccounts: SELECT DISTINCT SubAccountId, SubAccountName FROM focus_data_table
     """,
+    **_auth_kwargs(),
 )
 
 # Every call resolves its dataset through the catalog and borrows the
