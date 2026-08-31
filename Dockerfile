@@ -43,7 +43,10 @@ RUN mkdir -p /data
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import focus_mcp.server; print('OK')" || exit 1
 
-# MCP servers communicate over stdio, not an HTTP port
+# stdio by default (no port); FOCUS_TRANSPORT=streamable-http serves /mcp on
+# FOCUS_HTTP_PORT instead - set FOCUS_HTTP_HOST=0.0.0.0 to reach it from
+# outside the container.
+EXPOSE 8000
 RUN useradd -m -u 1000 mcp && \
     chown -R mcp:mcp /app /data
 USER mcp

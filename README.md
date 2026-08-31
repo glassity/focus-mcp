@@ -301,12 +301,75 @@ Two methods exist because DuckDB's built-in GCS support only speaks HMAC; ADC
 comes from the optional `gcsfs` dependency. Credentials are only ever read
 inside the server process and are never exposed to MCP clients.
 
+## Many datasets, one server
+
+Every data tool takes an optional `dataset` handle and `focus_version`, so
+one process can answer for several exports: a chat can compare last year's
+FOCUS 1.0 archive with this month's 1.2 export without restarting anything.
+Leave both out and the server uses `FOCUS_DATA_LOCATION` / `FOCUS_VERSION`.
+
+Handles are names, not paths. The server resolves them in this order:
+
+1. `FOCUS_DATASETS`, a JSON map for self-hosted setups:
+
+   ```bash
+   export FOCUS_DATASETS='{
+     "archive": {"location": "s3://billing/focus-2025", "version": "1.0"},
+     "current": {"location": "s3://billing/focus", "version": "1.2"}
+   }'
+   ```
+
+2. `FOCUS_CATALOG_URL`, an HTTP endpoint the server asks for anything not in
+   the map: it GETs `<url>/<handle>` with the caller's bearer token and
+   expects `{"location": "...", "version": "1.2"}`. This is how a shared
+   server serves many tenants from one process — the catalog answers for
+   the token, so a caller only ever reaches data it was issued a handle for.
+
+3. Over stdio, a raw location (`s3://…`, `/path`) is accepted as a handle
+   too: the client is the same user as the server. Over HTTP it is refused
+   unless `FOCUS_ALLOW_RAW_LOCATIONS=true`, because there the handle rides in
+   a request header that intermediaries can read.
+
+### Running as a shared server
+
+```bash
+FOCUS_TRANSPORT=streamable-http FOCUS_HTTP_HOST=0.0.0.0 FOCUS_HTTP_PORT=8000 \
+  FOCUS_DATASETS='{"current": {"location": "s3://billing/focus", "version": "1.2"}}' \
+  uvx focus-mcp
+```
+
+The endpoint is `http://host:8000/mcp`, Streamable HTTP, stateless: every
+request carries what it needs, so replicas can sit behind a plain load
+balancer. The `dataset` and `focus_version` parameters are declared with
+[`x-mcp-header`](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#x-mcp-header),
+so protocol 2026-07-28 clients mirror them into `Mcp-Param-Dataset` and
+`Mcp-Param-Focus-Version` headers and a gateway can route or meter by
+dataset without parsing the body. Older clients still work; the values just
+travel in the body only.
+
+To require a bearer token, point `FOCUS_JWKS_URL` at your identity
+provider's JWKS (install the `auth` extra: `uvx --from 'focus-mcp[auth]'
+focus-mcp`). `FOCUS_OIDC_ISSUER` pins the expected issuer and publishes it in
+the protected-resource metadata clients use to discover where to get a
+token; `FOCUS_RESOURCE_URL` is this server's own URL, the audience a token
+must name.
+
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FOCUS_DATA_LOCATION` | `data/focus-export` | Where the Parquet lives: a local path, `s3://…`, or `gs://…` |
-| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, `1.2`, `1.3` or `1.4`. Selects which query collection loads |
+| `FOCUS_VERSION` | `1.0` | FOCUS specification version of the default dataset: `1.0`, `1.1`, `1.2`, `1.3` or `1.4`. Selects which query collection loads |
+| `FOCUS_DATASETS` | (unset) | JSON map of dataset handles to `{location, version}`; see [Many datasets, one server](#many-datasets-one-server) |
+| `FOCUS_CATALOG_URL` | (unset) | HTTP catalog resolving a handle to `{location, version}` for the caller's bearer token |
+| `FOCUS_ALLOW_RAW_LOCATIONS` | `false` | Accept a location as the `dataset` over HTTP (always allowed over stdio) |
+| `FOCUS_MAX_DATASETS` | `8` | Open DuckDB connections kept at once; least recently used is closed beyond that |
+| `FOCUS_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
+| `FOCUS_HTTP_HOST` / `FOCUS_HTTP_PORT` | `127.0.0.1` / `8000` | Bind address for `streamable-http` |
+| `FOCUS_JWKS_URL` | (unset) | JWKS endpoint for verifying bearer tokens; unset means no authentication |
+| `FOCUS_OIDC_ISSUER` | (unset) | Expected token issuer, published as the authorization server |
+| `FOCUS_RESOURCE_URL` | (unset) | This server's URL: the audience tokens must be issued for |
+| `FOCUS_REQUIRED_SCOPES` | (unset) | Space-separated scopes a token must carry |
 | `AWS_REGION` | `us-east-1` | Region for S3 access |
 | `AWS_PROFILE` | (unset) | AWS profile for S3 authentication |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | (unset) | Static AWS credentials, if not using a role or profile |
