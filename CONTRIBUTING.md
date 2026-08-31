@@ -6,6 +6,10 @@ query library extracted from the FOCUS specification, and a Docker image.
 ## Layout
 
 - `src/focus_mcp/server.py`: the MCP server and all eight tools.
+- `src/focus_mcp/datasets.py`: turns a dataset handle into a location (static
+  map, HTTP catalog, or a raw path over stdio) and pools one DuckDB
+  connection per location.
+- `src/focus_mcp/auth.py`: bearer-token verification for the HTTP transport.
 - `src/focus_mcp/queries.py` and `src/focus_mcp/spec_loader.py`: load the
   query library and the spec-derived column and attribute definitions.
 - `src/focus_mcp/resources/queries/curated/<version>/`: the queries the
