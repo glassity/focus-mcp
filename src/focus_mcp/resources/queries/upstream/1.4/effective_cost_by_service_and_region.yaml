@@ -1,0 +1,31 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Effective Cost by Service and Region
+slug: effective-cost-by-service-and-region
+source_url: https://focus.finops.org/use-case/effective-cost-by-service-and-region/
+description: Aggregates EffectiveCost by billing period to align accrual-based cost reporting with invoice cycles.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    ServiceCategory,
+    ServiceName,
+    RegionId,
+    RegionName,
+    PricingUnit,
+    SUM(EffectiveCost) AS TotalEffectiveCost,
+    SUM(PricingQuantity) AS TotalPricingQuantity
+  FROM focus_data_table
+  WHERE
+    BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    ServiceCategory,
+    ServiceName,
+    RegionId,
+    RegionName,
+    PricingUnit

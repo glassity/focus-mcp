@@ -1,0 +1,20 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: Upstream aliases an expression inside GROUP BY, which is invalid in every dialect.
+title: Identify anomalous daily spending by subaccount
+slug: identify-anomalous-daily-spending-by-subaccount
+source_url: https://focus.finops.org/use-case/identify-anomalous-daily-spending-by-subaccount/
+description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Purchases can often cause false positives, for this reason, we want to monitor cost trends with up-front payments amortized. Graphing the data by day in a multiline chart can often help find the outliers.
+sql: |-
+  SELECT
+    DATE(ChargePeriodStart) AS Day,
+    ServiceProviderName,
+    SubAccountId,
+    SUM(EffectiveCost) AS DailyEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+    DATE(ChargePeriodStart),
+    ServiceProviderName,
+    SubAccountId

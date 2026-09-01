@@ -1,0 +1,17 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Determine Effective Savings Rate by Service
+slug: determine-effective-savings-rate-by-service
+source_url: https://focus.finops.org/use-case/determine-effective-savings-rate-by-service/
+description: This use cases focuses on Effective Savings Rate (ESR) per Service. The Effective Savings Rate is a KPI to track the efficiency of using commitment-based discounts. The KPI calculation is (Contracted Cost &#8211; Effective Cost) / Contracted Cost)
+sql: |-
+  SELECT
+    ServiceProviderName,
+    ServiceName,
+    SUM(ContractedCost) AS ContractedCost,
+    SUM(EffectiveCost)  AS EffectiveCost,
+    (SUM(ContractedCost) - SUM(EffectiveCost)) / NULLIF(SUM(ContractedCost), 0) AS EffectiveSavingsRate
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+  GROUP BY ServiceProviderName, ServiceName

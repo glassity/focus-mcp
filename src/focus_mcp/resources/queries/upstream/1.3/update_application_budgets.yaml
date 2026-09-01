@@ -1,0 +1,21 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Update budgets for each application
+slug: update-budgets-for-each-application
+source_url: https://focus.finops.org/use-case/update-budgets-for-each-application/
+description: Finance manages tracking of budgets and must update application budgets with the actual costs billed each month so the budget is not exceeded.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    Tags["Application"] AS Application,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+  GROUP BY
+    ServiceProviderName,
+    BillingPeriodStart,
+    BillingPeriodEnd,
+    Tags["Application"]

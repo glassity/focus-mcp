@@ -1,0 +1,23 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: SQL syntax error - cannot use alias 'AS StartDay' in GROUP BY clause. Must use the actual expression DATE(ChargePeriodStart).
+title: Identify anomalous daily spending by subaccount and region
+slug: daily-anomaly-region
+source_url: https://focus.finops.org/use-case/daily-anomaly-region/
+description: It is important for FinOps Practitioners to track daily spend from various angles to ensure any anomalous cost trends are easily detected. Region-level trends may get hidden when aggregated to a month-level. In this case, we want to monitor cost trends with up-front payments amortized.
+sql: |-
+  SELECT DATE(ChargePeriodStart) AS Day,
+         ProviderName,
+         SubAccountId,
+         RegionId,
+         RegionName,
+         SUM(EffectiveCost) AS DailyEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+  GROUP BY DATE(ChargePeriodStart),
+           ProviderName,
+           SubAccountId,
+           RegionId,
+           RegionName

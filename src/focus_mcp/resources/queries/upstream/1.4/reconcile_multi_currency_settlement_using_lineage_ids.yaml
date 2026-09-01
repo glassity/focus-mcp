@@ -1,0 +1,20 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Reconcile Multi-Currency Settlement using Lineage IDs
+slug: reconcile-multi-currency-settlement-using-lineage-ids
+source_url: https://focus.finops.org/use-case/reconcile-multi-currency-settlement-using-lineage-ids/
+description: Demonstrates how to use PaymentCurrencyInvoiceDetailId to reconcile granular records (denominated in the billing currency) against the aggregate records used for payment (denominated in the payment currency). Resolves the &#8216;Divergent Grain' problem where billing and payment currencies are represented at different aggregation levels.
+sql: |-
+  SELECT
+    PaymentCurrencyInvoiceDetailId,
+    SUM(BilledCost) AS TotalBilled_BillingCurrency,
+    SUM(PaymentCurrencyBilledCost) AS TotalBilled_PaymentCurrency,
+    SUM(PaymentCurrencyBilledCost) / NULLIF(SUM(BilledCost), 0) AS EffectiveExchangeRate
+  FROM InvoiceDetail
+  WHERE
+    InvoiceId = ?
+  GROUP BY
+    PaymentCurrencyInvoiceDetailId
+  ORDER BY
+    PaymentCurrencyInvoiceDetailId

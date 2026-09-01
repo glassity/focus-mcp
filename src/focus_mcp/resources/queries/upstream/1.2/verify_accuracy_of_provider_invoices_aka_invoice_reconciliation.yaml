@@ -1,0 +1,16 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Verify accuracy of provider invoices aka invoice reconciliation
+slug: verify-accuracy-of-provider-invoices-aka-invoice-reconciliation
+source_url: https://focus.finops.org/use-case/verify-accuracy-of-provider-invoices-aka-invoice-reconciliation/
+description: Aggregate provider billing data for each period and reconcile it against provider invoices to validate charge accuracy, flag discrepancies, and strengthen financial accountability.
+sql: |-
+  SELECT InvoiceIssuer,
+         InvoiceID,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+  GROUP BY InvoiceIssuer,
+           InvoiceID

@@ -1,0 +1,23 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Determine contracted savings by virtual currency
+slug: determine-contracted-savings-by-virtual-currency
+source_url: https://focus.finops.org/use-case/determine-contracted-savings-by-virtual-currency/
+description: Compare the virtual currency discounted rate to the virtual currency list price to determine the difference, as contracts can lower the virtual-currency price of certain operations.
+sql: |-
+  SELECT ServiceName,
+         ServiceSubcategory,
+         ChargeDescription,
+         BillingCurrency,
+         PricingCurrency,
+         SUM(PricingCurrencyListUnitPrice - PricingCurrencyContractedUnitPrice) AS ContractedSavingsInPricingCurrency SUM(ListUnitPrice - ContractedUnitPrice) AS ContractedSavingsInBillingCurrency
+  FROM focus_data_tabl
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND PricingCurrencyListUnitPrice > PricingCurrencyContractedUnitPrice
+  GROUP BY ServiceName,
+           ServiceSubcategory,
+           ChargeDescription,
+           BillingCurrency,
+           PricingCurrency

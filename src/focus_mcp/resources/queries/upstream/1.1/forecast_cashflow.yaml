@@ -1,0 +1,19 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Forecast cashflow month over month based on historical trends by service
+slug: forecast-cashflow
+source_url: https://focus.finops.org/use-case/forecast-cashflow/
+description: Finance needs to perform month over month forecasting of cashflow by extrapolating from historical cash costs. Having this data enables Finance to create cashflow cost models.
+sql: |-
+  SELECT MONTH(BillingPeriodStart),
+         ProviderName,
+         ServiceCategory,
+         ServiceName SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+  GROUP BY MONTH(BillingPeriodStart),
+           ProviderName,
+           ServiceCategory,
+           ServiceName

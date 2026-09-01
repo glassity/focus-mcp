@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze purchase of virtual currency
+slug: analyze-purchase-of-virtual-currency
+source_url: https://focus.finops.org/use-case/analyze-purchase-of-virtual-currency/
+description: Analyze virtual-currency purchase patterns (e.g., upfront) and actively monitor burn down to prevent overage charges.
+sql: |-
+  SELECT ProviderName,
+         PublisherName,
+         ChargeDescription,
+         PricingUnit,
+         BillingCurrency,
+         SUM(PricingQuantity) AS TotalPricingQuantity,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND ChargeCategory = 'Purchase'
+    AND PricingUnit = ?
+  GROUP BY ProviderName,
+           PublisherName,
+           ChargeDescription,
+           PricingUnit,
+           BillingCurrency

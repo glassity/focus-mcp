@@ -1,0 +1,9 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Compare resource usage month over month
+slug: compare-resource-usage-month-over-month-2
+source_url: https://focus.finops.org/use-case/compare-resource-usage-month-over-month-2/
+description: FinOps Practitioners can compare usage and costs across charge periods to identify changes in usage month over month.
+sql: "SELECT \n  MONTH(ChargePeriodStart),\n  ServiceProviderName,\n  ServiceName,\n  ResourceId,\n  SkuId,\n  ConsumedUnit,\n  SUM(ConsumedQuantity) AS TotalConsumedQuantity\nFROM focus_data_table\nWHERE ChargeCategory='Usage'\n  AND ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nGROUP BY\n  MONTH(ChargePeriodStart),\n  ServiceProviderName,\n  ServiceName,\n  ResourceId,\n  SkuId,\n  ConsumedUnit"
+divergence_note: Upstream publishes different SQL for 1.3 than for 1.2.

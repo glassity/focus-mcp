@@ -2,8 +2,8 @@
 """Prove a built wheel or sdist installs clean and serves MCP from a foreign directory.
 
 Usage:
-    uv run python scripts/verify_package.py dist/focus_mcp-0.2.0-py3-none-any.whl
-    uv run python scripts/verify_package.py dist/focus_mcp-0.2.0.tar.gz
+    uv run python scripts/verify_package.py dist/focus_mcp-0.3.0-py3-none-any.whl
+    uv run python scripts/verify_package.py dist/focus_mcp-0.3.0.tar.gz
 
 Accepts either a wheel (.whl) or an sdist (.tar.gz). Checks, in order:
   1. For a wheel only: it contains exactly one top-level package and no repo
@@ -35,10 +35,17 @@ from pathlib import Path
 REQUIRED_MEMBERS = [
     "focus_mcp/server.py",
     "focus_mcp/paths.py",
-    "focus_mcp/resources/queries/focus_use_cases.yaml",
     "focus_mcp/resources/specifications/columns.yaml",
     "focus_mcp/resources/specifications/attributes.yaml",
 ]
+
+# Query collections are directories of files rather than one named file, so
+# the wheel is checked for a populated collection instead of a fixed path.
+# Only curated/ ships: upstream/ is the baseline CI compares against and no
+# runtime code reads it, so packaging it would double the payload for data
+# no user can reach.
+REQUIRED_PREFIXES = ["focus_mcp/resources/queries/curated/"]
+FORBIDDEN_PREFIXES = ["focus_mcp/resources/queries/upstream/"]
 
 EXPECTED_TOOLS = {
     "execute_query",
@@ -75,6 +82,19 @@ def check_wheel_contents(wheel: Path) -> None:
     if missing:
         raise SystemExit(f"wheel is missing packaged files: {missing}")
 
+    empty = [
+        prefix
+        for prefix in REQUIRED_PREFIXES
+        if not any(name.startswith(prefix) and name.endswith(".yaml") for name in names)
+    ]
+    if empty:
+        raise SystemExit(f"wheel carries no query files under: {empty}")
+
+    shipped = [p for p in FORBIDDEN_PREFIXES
+               if any(name.startswith(p) for name in names)]
+    if shipped:
+        raise SystemExit(f"wheel should not carry: {shipped}")
+
     print(f"wheel contents OK ({len(names)} members)")
 
 
@@ -91,29 +111,26 @@ def install_into_clean_venv(artifact: Path, venv: Path) -> Path:
 
 
 async def handshake(script: Path, cwd: Path) -> None:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client import Client
+    from mcp.client.stdio import StdioServerParameters
 
     env = dict(os.environ)
     env["FOCUS_DATA_LOCATION"] = str(cwd / "no-such-data")
 
     params = StdioServerParameters(command=str(script), args=[], env=env, cwd=str(cwd))
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with Client(params) as client:
+        listed = await client.list_tools()
+        names = {tool.name for tool in listed.tools}
+        if not EXPECTED_TOOLS.issubset(names):
+            raise SystemExit(f"missing tools: {sorted(EXPECTED_TOOLS - names)}")
+        print(f"handshake OK, {len(names)} tools advertised")
 
-            listed = await session.list_tools()
-            names = {tool.name for tool in listed.tools}
-            if not EXPECTED_TOOLS.issubset(names):
-                raise SystemExit(f"missing tools: {sorted(EXPECTED_TOOLS - names)}")
-            print(f"handshake OK, {len(names)} tools advertised")
-
-            result = await session.call_tool("list_columns", {})
-            payload = json.loads(result.content[0].text)
-            total = payload.get("result", {}).get("total_columns", 0)
-            if total <= 0:
-                raise SystemExit(f"list_columns returned no columns: {payload}")
-            print(f"list_columns OK, {total} columns from a foreign working directory")
+        result = await client.call_tool("list_columns", {})
+        payload = json.loads(result.content[0].text)
+        total = payload.get("result", {}).get("total_columns", 0)
+        if total <= 0:
+            raise SystemExit(f"list_columns returned no columns: {payload}")
+        print(f"list_columns OK, {total} columns from a foreign working directory")
 
 
 def check_stdout_purity(script: Path, cwd: Path) -> None:

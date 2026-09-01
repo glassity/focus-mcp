@@ -1,0 +1,22 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Forecast amortized costs month over month based on historical trends
+slug: forecast-amortized-costs
+source_url: https://focus.finops.org/use-case/forecast-amortized-costs/
+description: Finance needs to perform month over month forecasting by extrapolating amortized costs based on historical rates.  Having this data enables Finance to create amortized cost models.
+sql: |-
+  SELECT MONTH(BillingPeriodStart),
+         ProviderName,
+         ServiceCategory,
+         ServiceName,
+         ChargeCategory,
+         SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+  GROUP BY MONTH(BillingPeriodStart),
+           ProviderName,
+           ServiceCategory,
+           ServiceName,
+           ChargeCategory

@@ -1,0 +1,25 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: JSON_UNQUOTE, JSON_CONTAINS_PATH and CAST AS UNSIGNED are MySQL-only. json_extract_string, json_exists and BIGINT are the DuckDB equivalents, and work over both the MAP that AWS delivers for SkuPriceDetails and the JSON the specification describes.
+title: Quantify usage of a component resource
+slug: quantify-usage-of-a-component-resource
+source_url: https://focus.finops.org/use-case/quantify-usage-of-a-component-resource/
+description: Capture daily aggregate usage of component resources, such as core hours or gigabytes, when Providers bill by virtual machines or quantity provisioned. This approach allows FinOps Practitioners to account for scenarios such as analyzing usage across auto-scaled compute services when instantaneous APIs cannot capture historical trends.
+sql: |-
+  SELECT ProviderName,
+         ServiceName,
+         PricingUnit,
+         RegionName,
+         json_extract_string(SkuPriceDetails, '$.InstanceSeries') AS InstanceSeries,
+         SUM(CAST(json_extract_string(SkuPriceDetails, '$.CoreCount') AS BIGINT)) AS TotalCoreCount
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND json_exists(SkuPriceDetails, '$.CoreCount')
+    AND json_exists(SkuPriceDetails, '$.InstanceSeries')
+  GROUP BY ProviderName,
+           ServiceName,
+           PricingUnit,
+           RegionName,
+           InstanceSeries

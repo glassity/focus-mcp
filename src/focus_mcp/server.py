@@ -11,35 +11,82 @@ Key Features:
 - Predefined analytical queries for common FinOps use cases
 - Dynamic SQL execution with parameter binding
 - FOCUS schema exploration and data profiling
+- One process serves many datasets: each call names its dataset and FOCUS version
 
 Architecture:
 - Uses DuckDB for high-performance analytical queries on Parquet files
 - Implements MCP (Model Context Protocol) for AI assistant integration
-- Supports both predefined queries and ad-hoc SQL execution
+- Runs over stdio for local use or Streamable HTTP (stateless) as a shared server
 - Handles FOCUS billing data standards and conventions
 """
 
 import logging
-import time
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
+from urllib.parse import urlsplit
 from pydantic import Field
 import duckdb
-from mcp.server.fastmcp import FastMCP
+from mcp.server.auth.settings import AuthSettings
+from mcp.server.mcpserver import Context, MCPServer
 
 from . import config
-from .data_loading import create_focus_view
-from .queries import focus_queries
+from .datasets import Catalog, ConnectionPool, Dataset, RequestScope
+from .queries import queries_for
 from .spec_loader import FocusSpecLoader
-from .storage_backends import resolve_backend
 
 logger = logging.getLogger(__name__)
 
+
+def _auth_kwargs() -> dict[str, Any]:
+    """Bearer-token handling for the HTTP transport, when configured.
+
+    A JWKS URL means tokens are verified here. The SDK insists on auth
+    settings alongside a verifier, and the issuer it publishes in the
+    protected-resource metadata is where clients go for a token.
+    """
+    if not config.JWKS_URL:
+        return {}
+    from .auth import JwksTokenVerifier
+
+    verifier = JwksTokenVerifier(
+        config.JWKS_URL,
+        issuer=config.OIDC_ISSUER,
+        audience=config.RESOURCE_URL,
+        required_scopes=config.REQUIRED_SCOPES,
+    )
+    issuer = config.OIDC_ISSUER or _origin(config.JWKS_URL)
+
+    # Without a resource URL the SDK publishes no protected-resource
+    # metadata and, with it, installs no bearer check at all - so the bind
+    # address stands in when the public URL is not configured.
+    resource_url = config.RESOURCE_URL or f"http://{config.HTTP_HOST}:{config.HTTP_PORT}/mcp"
+    return {
+        "token_verifier": verifier,
+        "auth": AuthSettings(
+            issuer_url=issuer,
+            resource_server_url=resource_url,
+            required_scopes=config.REQUIRED_SCOPES or None,
+        ),
+    }
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
 # Initialize MCP server with FOCUS-specific instructions
-# FastMCP provides a simplified interface for creating MCP servers
-mcp = FastMCP(
+mcp = MCPServer(
     "focus-mcp-server",
     instructions="""
     # FOCUS Billing Analytics Server
+
+    ## Datasets
+
+    Every data tool accepts an optional `dataset` handle and `focus_version`.
+    Leave both out to use the default dataset. get_data_info lists the
+    datasets this session may read; pass one of those names when the user
+    asks about a specific one, never invent one. Unknown handles return an
+    error listing what exists.
 
     ## Database Engine
 
@@ -127,107 +174,59 @@ mcp = FastMCP(
     - For service names, query: SELECT DISTINCT ServiceName FROM focus_data_table
     - For valid SubAccounts: SELECT DISTINCT SubAccountId, SubAccountName FROM focus_data_table
     """,
+    **_auth_kwargs(),
 )
 
-# Configuration - Load from environment variables via focus_mcp.config
-DATA_LOCATION = config.DATA_LOCATION
-
-# Global database connection - Singleton pattern for performance
-# DuckDB connections are thread-safe and expensive to create, so we reuse one instance
-db_connection: Optional[duckdb.DuckDBPyConnection] = None
-
-# How focus_data_table was built, and when. The manifest strategy pins the
-# file list of one delivery, so a server that stays up for days (stdio MCP
-# servers do) has to rebuild the view to see the deliveries after it.
-VIEW_MAX_AGE_SECONDS = 300
-loading_strategy: Optional[str] = None
-view_location: Optional[str] = None
-view_built_at: float = 0.0
+# Every call resolves its dataset from the request (or the process
+# defaults) and borrows the pooled connection for that location and
+# credential; nothing about "which data" lives on the process, so one HTTP
+# server can answer for many tenants.
+catalog = Catalog()
+pool = ConnectionPool()
 
 # Global specification loader - Singleton for cached spec data
 spec_loader: Optional[FocusSpecLoader] = None
 
-
-def get_db_connection() -> duckdb.DuckDBPyConnection:
-    """
-    Get or create a DuckDB database connection with FOCUS data loaded.
-
-    This function implements a singleton pattern to ensure we only create one
-    database connection per server instance. The connection is configured with:
-
-    1. The storage backend matching the configured data location (local,
-       s3://, or gs:// — see storage_backends.py), which loads whatever
-       extensions and credentials it needs
-    2. A 'focus_data_table' view over the Parquet files at that location,
-       sourced from the export's own manifests when it has them and from
-       a recursive glob otherwise (see data_loading.py), rebuilt once the
-       view is older than VIEW_MAX_AGE_SECONDS so later deliveries show up
-
-    Returns:
-        DuckDB connection with FOCUS data view ready for querying
-
-    Raises:
-        Exception: If DuckDB fails to initialize or load the data
-    """
-    global db_connection, loading_strategy, view_location, view_built_at
-
-    if db_connection is None:
-        # Create new DuckDB connection (in-memory database)
-        conn = duckdb.connect()
-
-        # Resolve the backend for the configured location and prepare the
-        # connection (extensions + credentials). prepare() returns an
-        # error hint to surface if reads fail later.
-        backend = resolve_backend(DATA_LOCATION)
-        location = backend.normalize(DATA_LOCATION)
-        # Clean up the path - ensure no trailing slash for consistency
-        clean_location = location.rstrip('/')
-        hint = backend.prepare(conn, clean_location)
-
-        strategy = None
-        if backend.exists(location):
-            try:
-                strategy = create_focus_view(conn, clean_location)
-            except Exception as e:
-                # Nothing is cached on failure, so the next call retries
-                # and raises this error again instead of handing out a
-                # viewless connection that fails with a catalog error.
-                conn.close()
-                if hint:
-                    raise RuntimeError(hint) from e
-                raise
-
-        db_connection = conn
-        loading_strategy = strategy
-        view_location = clean_location
-        view_built_at = time.monotonic()
-    elif loading_strategy and (
-        time.monotonic() - view_built_at > VIEW_MAX_AGE_SECONDS
-    ):
-        refresh_focus_view()
-
-    return db_connection
+# Tool parameters shared by every data tool. The x-mcp-header annotation
+# lets Streamable HTTP clients mirror the value into an Mcp-Param-* header,
+# so gateways can route and meter by dataset without parsing the body.
+# Plain strings with an empty default rather than Optional: the spec permits
+# x-mcp-header only on properties whose schema has a single primitive type,
+# and clients drop a tool whose annotation breaks that rule.
+DatasetParam = Annotated[
+    str,
+    Field(
+        default="",
+        description=(
+            "Dataset handle to read (omit for the server's default). Handles are "
+            "names the server knows, not paths."
+        ),
+        json_schema_extra={"x-mcp-header": "Dataset"},
+    ),
+]
+VersionParam = Annotated[
+    str,
+    Field(
+        default="",
+        description="FOCUS version, e.g. '1.2' (omit for the configured version)",
+        json_schema_extra={"x-mcp-header": "Focus-Version"},
+    ),
+]
 
 
-def refresh_focus_view() -> None:
-    """
-    Rebuild focus_data_table so later deliveries are picked up.
+def request_scope(ctx: Optional[Context]) -> RequestScope:
+    """The datasets and keys this request brought along (none over stdio)."""
+    return catalog.scope(ctx.headers if ctx else None)
 
-    A failed refresh keeps the working view in place and is retried after
-    the next interval: a transient listing failure must not take down a
-    server that is serving data fine.
-    """
-    global loading_strategy, view_built_at
 
-    view_built_at = time.monotonic()
-    try:
-        loading_strategy = create_focus_view(db_connection, view_location)
-    except Exception as e:
-        logger.warning(
-            "Keeping the loaded data: reloading it from %s failed: %s",
-            view_location,
-            e,
-        )
+def resolve_dataset(ctx: Optional[Context], handle: str, version: str) -> Dataset:
+    """The dataset a call reads, resolved within what the request may read."""
+    return catalog.resolve(handle, version, scope=request_scope(ctx))
+
+
+def get_db_connection(ctx: Optional[Context], dataset: Dataset) -> duckdb.DuckDBPyConnection:
+    """DuckDB connection with focus_data_table over the dataset's location."""
+    return pool.get(dataset.location, request_scope(ctx).credentials).conn
 
 
 def get_spec_loader() -> FocusSpecLoader:
@@ -263,8 +262,26 @@ def format_query_results(rows, columns, limit):
     return [dict(zip(columns, row)) for row in rows[:limit]]
 
 
+def provider_expression(columns: list) -> str:
+    """The provider column this dataset actually has.
+
+    FOCUS 1.3 renamed ProviderName to ServiceProviderName, and a dataset
+    read with union_by_name can span the rename and carry both columns
+    half-filled, so the newer name is preferred with the older as fallback
+    rather than either being assumed.
+    """
+    present = [c for c in ("ServiceProviderName", "ProviderName") if c in columns]
+    if len(present) == 2:
+        return f"COALESCE({present[0]}, {present[1]})"
+    return present[0] if present else "NULL"
+
+
 @mcp.tool()
-async def get_data_info() -> dict[str, Any]:
+async def get_data_info(
+    dataset: DatasetParam = "",
+    focus_version: VersionParam = "",
+    ctx: Context = None,
+) -> dict[str, Any]:
     """
     Get comprehensive information about the loaded FOCUS billing data.
 
@@ -282,7 +299,10 @@ async def get_data_info() -> dict[str, Any]:
         Dictionary containing data summary or error information
     """
     try:
-        conn = get_db_connection()
+        scope = request_scope(ctx)
+        selected = catalog.resolve(dataset, focus_version, scope=scope)
+        entry = pool.get(selected.location, scope.credentials)
+        conn = entry.conn
 
         # Check if the focus_data_table view was successfully created
         # This indicates whether data files were found and loaded
@@ -295,45 +315,55 @@ async def get_data_info() -> dict[str, Any]:
                 "result": {
                     "status": "no_data",
                     "message": (
-                        f"No FOCUS data found at {DATA_LOCATION}. Set FOCUS_DATA_LOCATION "
-                        "to the directory or bucket URI holding your FOCUS export."
+                        f"No FOCUS data found for dataset {selected.label}. Point it at "
+                        "the directory or bucket URI holding your FOCUS export."
                     ),
-                    "data_location": DATA_LOCATION,
+                    "dataset": selected.handle,
+                    "available_datasets": list(scope.datasets),
+                    "data_location": selected.location,
                 }
             }
-
-        # Generate comprehensive data summary using FOCUS standard columns
-        # These fields are part of the FOCUS specification for cloud billing
-        summary_query = """
-            SELECT
-                COUNT(*) as row_count,
-                MIN(BillingPeriodStart) as earliest_date,
-                MAX(BillingPeriodEnd) as latest_date,
-                COUNT(DISTINCT ProviderName) as provider_count,
-                COUNT(DISTINCT ServiceName) as service_count,
-                ROUND(SUM(EffectiveCost), 2) as total_cost
-            FROM focus_data_table
-        """
-        summary = conn.execute(summary_query).fetchone()
 
         # Get complete column list to understand data schema
         # Useful for users to know what fields are available for analysis
         columns_query = "SELECT column_name FROM information_schema.columns WHERE table_name = 'focus_data_table'"
         columns = [row[0] for row in conn.execute(columns_query).fetchall()]
 
+        provider = provider_expression(columns)
+
+        # Generate comprehensive data summary using FOCUS standard columns
+        # These fields are part of the FOCUS specification for cloud billing
+        summary_query = f"""
+            SELECT
+                COUNT(*) as row_count,
+                MIN(BillingPeriodStart) as earliest_date,
+                MAX(BillingPeriodEnd) as latest_date,
+                COUNT(DISTINCT {provider}) as provider_count,
+                COUNT(DISTINCT ServiceName) as service_count,
+                ROUND(SUM(EffectiveCost), 2) as total_cost
+            FROM focus_data_table
+        """
+        summary = conn.execute(summary_query).fetchone()
+
         # Sample cloud providers to give users context about data sources
         # Limited to 10 to avoid overwhelming output while providing useful examples
-        providers_query = "SELECT DISTINCT ProviderName FROM focus_data_table LIMIT 10"
+        providers_query = (
+            f"SELECT DISTINCT {provider} FROM focus_data_table "
+            f"WHERE {provider} IS NOT NULL LIMIT 10"
+        )
         providers = [row[0] for row in conn.execute(providers_query).fetchall()]
 
         return {
             "result": {
-                "data_location": DATA_LOCATION,
+                "dataset": selected.handle,
+                "available_datasets": list(scope.datasets),
+                "focus_version": selected.version,
+                "data_location": selected.location,
                 # How the files were picked: "manifest" reads an AWS
                 # export's own delivery manifests, the "glob" strategies
                 # read every Parquet file under the location and can
                 # double-count an export left behind on the prefix.
-                "loading_strategy": loading_strategy,
+                "loading_strategy": entry.strategy,
                 "row_count": summary[0],
                 "date_range": {
                     "start": str(summary[1]) if summary[1] else None,
@@ -356,7 +386,9 @@ async def get_data_info() -> dict[str, Any]:
 
 
 @mcp.tool()
-async def list_use_cases() -> dict[str, Any]:
+async def list_use_cases(
+    focus_version: VersionParam = "",
+) -> dict[str, Any]:
     """
     List all available predefined FOCUS analytical queries.
 
@@ -373,14 +405,16 @@ async def list_use_cases() -> dict[str, Any]:
         Dictionary containing the list of available queries with metadata
     """
     try:
-        all_queries = list(focus_queries.queries.values())
-
         # Format use cases with lightweight metadata only
         # Excludes SQL text to keep response size manageable for browsing
+        # The advertised id is the lookup key rather than upstream's URL
+        # slug: the two differ for some queries, and an id this list hands
+        # out must resolve when passed back to get_use_case.
+        library = queries_for(focus_version)
         use_cases = []
-        for query in all_queries:
+        for key, query in library.queries.items():
             use_case = {
-                "id": query.slug,
+                "id": key,
                 "name": query.name,
                 "description": query.description or "No description available",
                 "parameter_count": query.query.count('?'),
@@ -389,6 +423,7 @@ async def list_use_cases() -> dict[str, Any]:
 
         return {
             "result": {
+                "focus_version": library.version,
                 "total": len(use_cases),
                 "use_cases": use_cases,
             }
@@ -400,6 +435,7 @@ async def list_use_cases() -> dict[str, Any]:
 @mcp.tool()
 async def get_use_case(
     use_case_id: str = Field(..., description="Use case ID to get details for"),
+    focus_version: VersionParam = "",
 ) -> dict[str, Any]:
     """
     Get detailed information about a specific predefined FOCUS query.
@@ -420,18 +456,15 @@ async def get_use_case(
         Dictionary with complete query details or error information
     """
     try:
-        # Retrieve the query template from the loaded queries
-        # Try both formats: with underscores (key) and with hyphens (slug)
-        query_template = focus_queries.get_query(use_case_id)
-        if not query_template:
-            # Try converting hyphens to underscores
-            alt_id = use_case_id.replace("-", "_")
-            query_template = focus_queries.get_query(alt_id)
-
+        # get_query resolves keys and upstream slugs alike
+        query_template = queries_for(focus_version).get_query(use_case_id)
         if not query_template:
             return {"error": f"Use case not found: {use_case_id}"}
 
-        # Build comprehensive query information
+        # The library is CC BY 4.0, which requires the attribution and a
+        # statement of whether the work was modified - and this is the
+        # tool that serves the SQL, so the statement belongs here.
+        adapted = " - adapted for DuckDB" if query_template.adapted else ""
         result = {
             "id": use_case_id,
             "name": query_template.name,
@@ -439,6 +472,7 @@ async def get_use_case(
             "sql": query_template.query,
             "focus_versions": query_template.focus_versions,
             "citation": query_template.citation,
+            "license": f"FOCUS use case library, CC BY 4.0{adapted}",
         }
 
         # Show parameter count from SQL
@@ -461,6 +495,9 @@ async def execute_query(
         description="Parameters for the query (prefer list format: ['2025-01-01', '2025-02-01'])",
     ),
     limit: Optional[int] = Field(100, description="Max rows to return"),
+    dataset: DatasetParam = "",
+    focus_version: VersionParam = "",
+    ctx: Context = None,
 ) -> dict[str, Any]:
     """
     Execute SQL queries or predefined use cases against FOCUS billing data.
@@ -495,18 +532,13 @@ async def execute_query(
         if query and use_case:
             return {"error": "Provide either 'query' or 'use_case', not both"}
 
-        conn = get_db_connection()
+        selected = resolve_dataset(ctx, dataset, focus_version)
+        conn = get_db_connection(ctx, selected)
 
         # Determine SQL to execute and gather metadata
         if use_case:
-            # Load predefined query from the query library
-            # Try both formats: with hyphens (slug) and with underscores (key)
-            query_template = focus_queries.get_query(use_case)
-            if not query_template:
-                # Try converting hyphens to underscores
-                alt_id = use_case.replace("-", "_")
-                query_template = focus_queries.get_query(alt_id)
-
+            # get_query resolves keys and upstream slugs alike
+            query_template = queries_for(selected.version).get_query(use_case)
             if not query_template:
                 return {
                     "error": f"Use case not found: {use_case}. Use 'list_use_cases' to see available queries."
@@ -574,6 +606,7 @@ async def execute_query(
         # Build response with metadata and results
         response = {
             "query_name": query_name,
+            "dataset": selected.handle,
             "row_count": len(result),
             "columns": columns,
             "data": formatted_data,
@@ -593,7 +626,7 @@ async def execute_query(
 
 @mcp.tool()
 async def list_columns(
-    version: Optional[str] = Field(None, description="FOCUS version (e.g., '1.0', '1.1', '1.2'). Uses configured version if not specified."),
+    version: VersionParam = "",
     feature_level: Optional[str] = Field(None, description="Filter by feature level: Mandatory, Conditional, or Optional"),
     column_type: Optional[str] = Field(None, description="Filter by column type: Dimension or Metric"),
 ) -> dict[str, Any]:
@@ -620,7 +653,7 @@ async def list_columns(
 
         # Use configured version if not specified
         if not version:
-            version = config.FOCUS_VERSION
+            version = catalog.default_version
 
         # Ensure version is a string without 'v' prefix
         version = str(version).lstrip('v')
@@ -678,7 +711,7 @@ async def list_columns(
 @mcp.tool()
 async def get_column_details(
     column_ids: list[str] = Field(..., description="List of column IDs or names to get details for"),
-    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+    version: VersionParam = "",
 ) -> dict[str, Any]:
     """
     Get detailed information for specific FOCUS columns.
@@ -708,7 +741,7 @@ async def get_column_details(
 
         # Use configured version if not specified
         if not version:
-            version = config.FOCUS_VERSION
+            version = catalog.default_version
 
         version = str(version).lstrip('v')
 
@@ -739,7 +772,7 @@ async def get_column_details(
 
 @mcp.tool()
 async def list_attributes(
-    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+    version: VersionParam = "",
 ) -> dict[str, Any]:
     """
     List all FOCUS attributes that apply across the specification.
@@ -763,7 +796,7 @@ async def list_attributes(
 
         # Use configured version if not specified
         if not version:
-            version = config.FOCUS_VERSION
+            version = catalog.default_version
 
         version = str(version).lstrip('v')
 
@@ -807,7 +840,7 @@ async def list_attributes(
 @mcp.tool()
 async def get_attribute_details(
     attribute_ids: list[str] = Field(..., description="List of attribute IDs or names to get details for"),
-    version: Optional[str] = Field(None, description="FOCUS version (uses configured version if not specified)"),
+    version: VersionParam = "",
 ) -> dict[str, Any]:
     """
     Get detailed information for specific FOCUS attributes.
@@ -834,7 +867,7 @@ async def get_attribute_details(
 
         # Use configured version if not specified
         if not version:
-            version = config.FOCUS_VERSION
+            version = catalog.default_version
 
         version = str(version).lstrip('v')
 
@@ -867,13 +900,24 @@ def main():
     """
     Run the FOCUS MCP server.
 
-    Starts the FastMCP server which handles MCP protocol communication
-    and exposes the FOCUS billing analysis tools to MCP clients.
-
-    The server runs indefinitely until interrupted, maintaining the
-    database connection and serving requests.
+    stdio (the default) is for a client on the same machine, so a raw
+    location is an acceptable dataset there. Streamable HTTP runs stateless:
+    every request carries what it needs, so instances can be replicated
+    behind a plain load balancer.
     """
-    mcp.run()
+    if config.TRANSPORT == "stdio":
+        catalog.allow_raw_locations = True
+        mcp.run()
+    elif config.TRANSPORT == "streamable-http":
+        mcp.run(
+            transport="streamable-http",
+            host=config.HTTP_HOST,
+            port=config.HTTP_PORT,
+            stateless_http=True,
+            json_response=True,
+        )
+    else:
+        raise SystemExit(f"FOCUS_TRANSPORT must be 'stdio' or 'streamable-http', not {config.TRANSPORT!r}")
 
 
 if __name__ == "__main__":

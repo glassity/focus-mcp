@@ -1,0 +1,18 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: JSON_CONTAINS_PATH is not supported in DuckDB. Replaced with json_extract_string to check if a tag exists. The '$.?' placeholder is replaced with '$.' || ? to dynamically build the JSON path.
+title: Analyze tag coverage
+slug: analyze-tag-coverage
+source_url: https://focus.finops.org/use-case/analyze-tag-coverage/
+description: Analyzing the amount of costs for a provider that have been tagged with a specific tag can enable the FinOps practitioner to check the amount of costs being allocated via tags.
+sql: |-
+  SELECT SUM(CASE
+                 WHEN json_extract_string(Tags, '$.' || ?) IS NOT NULL THEN EffectiveCost
+                 ELSE 0
+             END) / SUM(EffectiveCost) * 100 AS TaggedPercentage
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND EffectiveCost > 0
+    AND ProviderName = ?

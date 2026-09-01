@@ -1,0 +1,17 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze credit memos
+slug: analyze-credit-memos
+source_url: https://focus.finops.org/use-case/analyze-credit-memos/
+description: Locate provider-issued credit memos in billing data and analyze how each one reduces net spend.
+sql: |-
+  SELECT ProviderName,
+         InvoiceID,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+    AND ChargeCategory = 'Credit'
+  GROUP BY ProviderName,
+           InvoiceID

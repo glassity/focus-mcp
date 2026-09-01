@@ -1,0 +1,24 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report corrections by subaccount for a previously invoiced billing period
+slug: report-corrections-by-subaccount-for-a-previously-invoiced-billing-period
+source_url: https://focus.finops.org/use-case/report-corrections-by-subaccount-for-a-previously-invoiced-billing-period/
+description: Large organizations often re-allocate prior-period corrections down to individual projects, subscriptions, or resource groups. This allows each team to see the historical adjustments that affect its spend.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingAccountId,
+    ServiceCategory,
+    SubAccountId,
+    SubAccountName,
+    SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ? AND BillingPeriodEnd < ?
+    AND ChargeClass = 'Correction'
+  GROUP BY
+    ServiceProviderName,
+    BillingAccountId,
+    SubAccountId,
+    SubAccountName,
+    ServiceCategory

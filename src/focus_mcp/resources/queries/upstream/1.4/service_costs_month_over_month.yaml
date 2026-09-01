@@ -1,0 +1,8 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Analyze service costs month over month
+slug: analyze-service-costs-month-over-month
+source_url: https://focus.finops.org/use-case/analyze-service-costs-month-over-month/
+description: Analyzing service-level spending trends over a time period can expose expected and unexpected growth in the consumption of various services across all providers and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering and finance leaders within the organization.
+sql: "SELECT\n  MONTH(ChargePeriodStart),\n  ServiceProviderName,\n  ServiceName,\n  SUM(EffectiveCost) AS TotalEffectiveCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? AND ChargePeriodStart < ?\nGROUP BY \n  MONTH(ChargePeriodStart), \n  ServiceProviderName,\n  ServiceName\nORDER BY\n  MONTH(ChargePeriodStart),\n  SUM(EffectiveCost) DESC"

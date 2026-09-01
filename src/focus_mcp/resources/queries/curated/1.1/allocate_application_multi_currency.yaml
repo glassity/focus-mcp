@@ -1,0 +1,23 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: DuckDB does not support Tags["ApplicationId"] syntax for JSON field access. Changed to use Tags->>'ApplicationId' which is the correct DuckDB JSON extraction syntax.
+title: Allocate multi-currency charges per application
+slug: allocate-application-multi-currency
+source_url: https://focus.finops.org/use-case/allocate-application-multi-currency/
+description: Finance needs to allocate costs and perform chargeback for charges associated with a single application that come from different geographic locations and are in different currencies.
+sql: |-
+  SELECT Tags->>'ApplicationId',
+         ProviderName,
+         BillingAccountId,
+         BillingAccountName,
+         BillingCurrency,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodEnd < ?
+  GROUP BY Tags->>'ApplicationId',
+           ProviderName,
+           BillingAccountId,
+           BillingAccountName,
+           BillingCurrency

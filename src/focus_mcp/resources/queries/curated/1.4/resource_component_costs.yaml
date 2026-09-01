@@ -1,0 +1,8 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze costs of components of a resource
+slug: resource-component-costs
+source_url: https://focus.finops.org/use-case/resource-component-costs/
+description: Using FOCUS data, an Engineer can deep dive on cost details for a single resource.
+sql: "SELECT ResourceId,\n  ResourceName,\n  ResourceType,\n  ChargeDescription,\n  SkuId,\n  SUM(EffectiveCost) AS TotalEffectiveCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ?  AND ChargePeriodEnd < ?\n  AND ResourceId=?\nGROUP BY ResourceId,\n  ResourceName,\n  ResourceType, \n  ChargeDescription,\n  SkuId"

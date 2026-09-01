@@ -1,0 +1,27 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Commitment Discount Effective Cost Breakdown
+slug: commitment-discount-effective-cost-breakdown
+source_url: https://focus.finops.org/use-case/commitment-discount-effective-cost-breakdown/
+description: Analyzes commitment discount amortization by charge period, capturing costs based on when resources were consumed. Filters to Usage charges with CommitmentDiscountId populated and groups by CommitmentDiscountId and CommitmentDiscountStatus to separate Used vs. Unused amortization.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    CommitmentDiscountId,
+    CommitmentDiscountStatus,
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE
+    ChargePeriodStart >= ?
+    AND ChargePeriodEnd < ?
+    AND NOT CommitmentDiscountId IS NULL
+    AND ChargeCategory = 'Usage'
+  GROUP BY
+    ServiceProviderName,
+    CommitmentDiscountId,
+    CommitmentDiscountStatus,
+    ChargePeriodStart,
+    ChargePeriodEnd

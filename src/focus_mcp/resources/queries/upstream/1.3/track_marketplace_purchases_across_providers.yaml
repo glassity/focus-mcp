@@ -1,0 +1,27 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Track marketplace purchases across providers
+slug: track-marketplace-purchases-across-providers
+source_url: https://focus.finops.org/use-case/track-marketplace-purchases-across-providers/
+description: Identify marketplace purchases where the service provider differs from the host provider to track third-party software spending and optimize vendor relationships.
+sql: |-
+  SELECT
+    ServiceProviderName,
+    HostProviderName,
+    InvoiceIssuerName,
+    ServiceName,
+    ChargeCategory,
+    SUM(BilledCost) AS TotalBilledCost,
+    COUNT(DISTINCT ResourceId) AS ResourceCount
+   FROM focus_data_table
+   WHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+    AND ServiceProviderName != HostProviderName
+    AND ChargeCategory IN ('Purchase', 'Usage')
+   GROUP BY
+    ServiceProviderName,
+    HostProviderName,
+    InvoiceIssuerName,
+    ServiceName,
+    ChargeCategory
+   ORDER BY TotalBilledCost DESC

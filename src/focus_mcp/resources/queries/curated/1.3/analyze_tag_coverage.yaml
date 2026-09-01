@@ -1,0 +1,10 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: JSON_CONTAINS_PATH is MySQL-only; json_extract_string(...) IS NOT NULL is the DuckDB equivalent, and '$.?' becomes '$.' || ? so the tag key stays a bound parameter rather than literal text. Uses the same form as the 1.2 collection so tag coverage means the same thing at every version.
+title: Analyze tag coverage
+slug: analyze-tag-coverage
+source_url: https://focus.finops.org/use-case/analyze-tag-coverage/
+description: Analyzing the amount of costs for a provider that have been tagged with a specific tag can enable the FinOps practitioner to check the amount of costs being allocated via tags.
+sql: "SELECT \n    SUM(CASE \n        WHEN json_extract_string(tags, '$.' || ?) IS NOT NULL \n        THEN EffectiveCost \n        ELSE 0 \n    END) / SUM(EffectiveCost) * 100 AS TaggedPercentage\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\n     AND EffectiveCost > 0\n     AND ServiceProviderName = ?"
+divergence_note: Upstream publishes different SQL for 1.3 than for 1.2.

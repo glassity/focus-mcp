@@ -1,0 +1,32 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze the different metered costs for a particular SKU
+slug: analyze-the-different-metered-costs-for-a-particular-sku-2
+source_url: https://focus.finops.org/use-case/analyze-the-different-metered-costs-for-a-particular-sku-2/
+description: Understanding the individual metered costs of a particular SKU can help assist FinOps practitioners understand the cost breakdown of usage of a select resource. Especially in cases where a SKU has a few component charges like (Usage hours, Throughput, API requests, etc)
+sql: |-
+  SELECT
+    ServiceProviderName,
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    SkuId,
+    SkuPriceId,
+    PricingUnit,
+    ListUnitPrice,
+    SUM(PricingQuantity) AS TotalPricingQuantity,
+    SUM(ListCost) AS TotalListCost,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+    ServiceProviderName,
+    ChargePeriodStart,
+    ChargePeriodEnd,
+    SkuId,
+    SkuPriceId,
+    PricingUnit,
+    ListUnitPrice
+  ORDER BY
+    ChargePeriodStart ASC
+  LIMIT 100

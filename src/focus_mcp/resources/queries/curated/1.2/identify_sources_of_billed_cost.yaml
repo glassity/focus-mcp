@@ -1,0 +1,21 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: InvoiceIssuer was renamed to InvoiceIssuerName in FOCUS 1.1; AWS FOCUS 1.2 exports only carry InvoiceIssuerName.
+title: Identify sources of billed cost
+slug: identify-sources-of-billed-cost
+source_url: https://focus.finops.org/use-case/identify-sources-of-billed-cost/
+description: Reconcile billing data from vendors, provider marketplaces, and cloud service providers to pinpoint true spend and eliminate duplicate charges.
+sql: |-
+  SELECT ProviderName,
+         PublisherName,
+         InvoiceIssuerName,
+         InvoiceID,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ?
+    and ChargePeriodEnd < ?
+  GROUP BY ProviderName,
+           PublisherName,
+           InvoiceIssuerName,
+           InvoiceID

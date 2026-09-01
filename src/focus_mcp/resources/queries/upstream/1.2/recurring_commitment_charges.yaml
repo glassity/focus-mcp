@@ -1,0 +1,24 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report recurring charges for commitment-based discounts over a period
+slug: recurring-commitment-charges
+source_url: https://focus.finops.org/use-case/recurring-commitment-charges/
+description: As a Finance person, I want to understand the recurring costs of commitment based discounts over a period of time to improve forecasting.
+sql: |-
+  SELECT BillingPeriodStart,
+         CommitmentDiscountId,
+         CommitmentDiscountName,
+         CommitmentDiscountType,
+         ChargeFrequency,
+         SUM(BilledCost) AS TotalBilledCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart >= ?
+    AND BillingPeriodStart < ?
+    AND ChargeFrequency = 'Recurring'
+    AND CommitmentDiscountId IS NOT NULL
+  GROUP BY BillingPeriodStart,
+           CommitmentDiscountId,
+           CommitmentDiscountName,
+           CommitmentDiscountType,
+           ChargeFrequency

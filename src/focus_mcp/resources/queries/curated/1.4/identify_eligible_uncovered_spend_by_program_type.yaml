@@ -1,0 +1,28 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+fix_comment: MySQL-only constructs upstream ships untested against DuckDB. json_extract_array becomes json_extract(x, '$[*]'). json_extract_array is MySQL-only; DuckDB's json_extract returns a list only when the path selects every element, so [*] is appended for UNNEST. UNNEST(...) AS X aliases the derived table, not the column, so every reference to X returns NULL; AS _u(X) names the column.
+title: Identify Eligible Uncovered Spend by Program Type
+slug: identify-eligible-uncovered-spend-by-program-type
+source_url: https://focus.finops.org/use-case/identify-eligible-uncovered-spend-by-program-type/
+description: Identifies charges that are eligible for commitment programs but are not currently covered by a commitment discount. A practitioner running relevant workloads can use this to quantify the savings opportunity per commitment program type (e.g., FlexibleSpendPlan vs. ResourceReservation) and per service. Filters to &#8216;Usage' charges where CommitmentProgramEligibilityDetails is populated and CommitmentDiscountId is null. Uses BilledCost (not EffectiveCost) because the charges are uncovered, so BilledCost reflects the actual amount paid and the savings opportunity.
+sql: |-
+  SELECT
+    CU.ServiceProviderName,
+    CU.ServiceName,
+    JSON_VALUE(CP, '$.ProgramType') AS EligibleProgramType,
+    SUM(CU.BilledCost) AS EligibleUncoveredCost
+  FROM focus_data_table CU
+  CROSS JOIN
+    UNNEST(json_extract(CU.CommitmentProgramEligibilityDetails, '$.CommitmentPrograms[*]')) AS _u(CP)
+  WHERE CU.ChargePeriodStart >= ? AND CU.ChargePeriodEnd < ?
+    AND CU.ChargeCategory = 'Usage'
+    AND CU.CommitmentDiscountId IS NULL
+    AND CU.CommitmentProgramEligibilityDetails IS NOT NULL
+    -- Replace with provider-specific discount-bearing program types
+    AND JSON_VALUE(CP, '$.ProgramType') IN ('FlexibleSpendPlan', 'ResourceReservation')
+  GROUP BY
+    CU.ServiceProviderName,
+    CU.ServiceName,
+    JSON_VALUE(CP, '$.ProgramType')
+  ORDER BY EligibleUncoveredCost DESC

@@ -1,0 +1,8 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Determine target of virtual currency usage
+slug: determine-target-of-virtual-currency-usage-2
+source_url: https://focus.finops.org/use-case/determine-target-of-virtual-currency-usage-2/
+description: Identify and rank the top charge categories driving virtual-currency consumption to target optimization efforts.
+sql: "SELECT \n    ServiceProviderName,\n    HostProviderName,\n    ServiceName,\n    ChargeDescription,\n    SUM(PricingCurrencyEffectiveCost) AS TotalPricingCurrencyEffectiveCost\nFROM focus_data_table\nWHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?\nAND PricingCurrency = ?\nGROUP BY\n    ServiceProviderName,\n    HostProviderName,\n    ServiceName,\n    ChargeDescription\nORDER BY TotalPricingCurrencyEffectiveCost DESC\nLIMIT 10"

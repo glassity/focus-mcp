@@ -1,0 +1,24 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Identify unused capacity reservations
+slug: identify-unused-capacity-reservations-2
+source_url: https://focus.finops.org/use-case/identify-unused-capacity-reservations-2/
+description: Identify all data in a time period where CapacityReservationStatus is &#8216;unused' thus identifying capacity reservations that aren't used and enabling the Practitioner to take action on either cancelling the reservation (if able), working with other personas on a workload that could use the reservation, or performing informed ignore (knowing it is there but ignoring it because there is nothing one can do).
+sql: |-
+  SELECT
+    ServiceProviderName,
+    BillingAccountId,
+    CapacityReservationId,
+    CapacityReservationStatus,
+    SUM(BilledCost) AS TotalBilledCost,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+    AND CapacityReservationStatus = 'Unused'
+  GROUP BY
+    ServiceProviderName,
+    BillingAccountId,
+    CapacityReservationId,
+    CapacityReservationStatus,
+    CommitmentDiscountStatus

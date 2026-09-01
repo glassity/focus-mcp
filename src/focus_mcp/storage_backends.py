@@ -13,11 +13,14 @@ Resolution walks BACKENDS in order; LocalBackend is the catch-all.
 
 import os
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import duckdb
 
 from . import config
+
+if TYPE_CHECKING:
+    from .datasets import Credentials
 
 
 class StorageBackend(ABC):
@@ -35,10 +38,14 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str
+        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
     ) -> Optional[str]:
         """
         Load extensions and configure credentials on the connection.
+
+        ``credentials`` are keys the request brought along; a backend that
+        can use them must scope them to ``location`` so a query cannot
+        reach anything else with them.
 
         Returns an error hint to surface if reads later fail, or None
         when there is nothing useful to add.
@@ -54,9 +61,10 @@ class StorageBackend(ABC):
 
 
 class S3Backend(StorageBackend):
-    """s3:// locations, authenticated via the AWS credential chain.
+    """s3:// locations, authenticated with request keys or the credential chain.
 
-    The credential chain automatically discovers credentials from
+    Request keys (X-Aws-* headers) become a secret scoped to the location
+    they were sent for. Otherwise the credential chain automatically discovers credentials from
     environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
     AWS_SESSION_TOKEN), AWS profiles (AWS_PROFILE), IAM roles, and the
     instance metadata service.
@@ -68,10 +76,28 @@ class S3Backend(StorageBackend):
         return location.startswith("s3://")
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str
+        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
     ) -> Optional[str]:
         conn.execute("INSTALL httpfs; LOAD httpfs;")
         # Values are passed as bound parameters so no SQL escaping is needed
+        if credentials:
+            conn.execute("""
+                CREATE OR REPLACE SECRET aws_s3_secret (
+                    TYPE s3,
+                    KEY_ID ?,
+                    SECRET ?,
+                    SESSION_TOKEN ?,
+                    REGION ?,
+                    SCOPE ?
+                )
+            """, [
+                credentials.key_id,
+                credentials.secret,
+                credentials.session_token,
+                credentials.region or config.AWS_REGION,
+                location if location.endswith("/") else location + "/",
+            ])
+            return "read with the credentials sent in this request"
         conn.execute("""
             CREATE OR REPLACE SECRET aws_s3_secret (
                 TYPE s3,
@@ -115,7 +141,7 @@ class GCSBackend(StorageBackend):
         return location
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str
+        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
     ) -> Optional[str]:
         key_id = os.getenv("GCS_HMAC_KEY_ID")
         secret = os.getenv("GCS_HMAC_SECRET")
@@ -157,7 +183,7 @@ class LocalBackend(StorageBackend):
         return True
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str
+        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
     ) -> Optional[str]:
         return None
 

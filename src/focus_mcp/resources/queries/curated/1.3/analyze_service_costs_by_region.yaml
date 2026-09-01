@@ -1,0 +1,23 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Analyze service costs by region
+slug: analyze-service-costs-by-region-2
+source_url: https://focus.finops.org/use-case/analyze-service-costs-by-region-2/
+description: Analyzing Service level spending trends over a time period can expose expected and unexpected growth in the consumption of various services, by region, across all service providers and is a good way for the FinOps team to prioritize usage and rate optimization conversations with product, engineering and finance leaders within the organization.
+sql: |-
+  SELECT
+    ChargePeriodStart,
+    ServiceProviderName,
+    RegionId,
+    ServiceName,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE ChargePeriodStart >= ? and ChargePeriodEnd  < ?
+  GROUP BY
+    ChargePeriodStart,
+    ServiceProviderName,
+    RegionId,
+    ServiceName
+  ORDER BY ChargePeriodStart,
+    SUM(EffectiveCost) DESC

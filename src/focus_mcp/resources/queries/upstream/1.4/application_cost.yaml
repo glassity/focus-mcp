@@ -1,0 +1,18 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Report application cost month over month
+slug: application-cost
+source_url: https://focus.finops.org/use-case/application-cost/
+description: As an application owner or engineering team I want to track the month over month costs of my application.
+sql: |-
+  SELECT
+    MONTH(BillingPeriodStart),
+    ServiceName,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE Tags["Application"] = ?
+    AND ChargePeriodStart >= ? AND ChargePeriodEnd < ?
+  GROUP BY
+    MONTH(BillingPeriodStart),
+    ServiceName

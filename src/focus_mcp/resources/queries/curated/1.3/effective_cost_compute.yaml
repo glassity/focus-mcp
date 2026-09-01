@@ -1,0 +1,26 @@
+# Runs as written. Any difference from the matching file under
+# upstream/ must be explained by fix_comment; see CONTRIBUTING.md.
+
+title: Report effective cost of compute
+slug: report-effective-cost-of-compute
+source_url: https://focus.finops.org/use-case/report-effective-cost-of-compute/
+description: Engineers and Engineering Managers want to reduce their billed cost for Compute from a specific service provider. In order to do that, they need to know the current rate of commitment-based discounts (without contracted discounts) per type of commitment. This helps to strategize further purchases.
+sql: |-
+  SELECT
+    CommitmentDiscountType,
+    ServiceProviderName,
+    ServiceName,
+    SubAccountId,
+    SubAccountName,
+    BillingPeriodStart,
+    SUM(EffectiveCost) AS TotalEffectiveCost
+  FROM focus_data_table
+  WHERE BillingPeriodStart  >= ? AND BillingPeriodEnd <= ?
+    AND ServiceCategory = 'Compute'
+  GROUP BY
+    CommitmentDiscountType,
+    ServiceName,
+    ServiceProviderName,
+    SubAccountId,
+    SubAccountName,
+    BillingPeriodStart

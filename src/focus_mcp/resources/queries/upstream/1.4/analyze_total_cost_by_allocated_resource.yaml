@@ -1,0 +1,24 @@
+# Verbatim from the FinOps Foundation. Do not edit by hand: this is
+# the baseline every local correction is measured against.
+
+title: Analyze total cost by allocated resource
+slug: analyze-total-cost-by-allocated-resource
+source_url: https://focus.finops.org/use-case/analyze-total-cost-by-allocated-resource/
+description: Aggregate effective cost by allocated resource ID to understand actual consumption costs for individual workloads or namespaces within shared infrastructure.
+sql: |-
+  SELECT
+    AllocatedResourceId,
+    AllocatedResourceName,
+    ResourceId AS OriginResourceId,
+    SUM(EffectiveCost) AS TotalEffectiveCost,
+    COUNT(*) AS ChargeCount
+   FROM focus_data_table
+   WHERE ChargeCategory='Usage'
+    AND ChargePeriodStart >= ? AND ChargePeriodEnd <= ?
+    AND AllocatedMethodId IS NOT NULL
+    AND AllocatedResourceId IS NOT NULL
+   GROUP BY
+    AllocatedResourceId,
+    AllocatedResourceName,
+    ResourceId
+   ORDER BY TotalEffectiveCost DESC
