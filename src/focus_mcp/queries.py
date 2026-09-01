@@ -87,8 +87,9 @@ class QueryLoader:
     queries by ID, slug, or iterate through all available queries.
     """
 
-    def __init__(self):
-        """Initialize the query loader and load version-specific queries."""
+    def __init__(self, version: Optional[str] = None):
+        """Load the collection for one FOCUS version (the configured one by default)."""
+        self.version = str(version).lstrip("v") if version else config.FOCUS_VERSION
         self.queries: Dict[str, Query] = {}
         self._load_queries()
 
@@ -102,7 +103,7 @@ class QueryLoader:
         upstream's text live in the file itself, marked by fix_comment and
         checked against resources/queries/upstream/ in CI.
         """
-        version = config.FOCUS_VERSION
+        version = self.version
         available = available_versions()
         # Checked against the listing rather than trusted as a path
         # component: "../upstream/1.4" is a real directory, and loading it
@@ -183,3 +184,14 @@ class QueryLoader:
 # Initialized at module import to pre-load all available queries
 # This singleton pattern ensures queries are loaded once and cached
 focus_queries = QueryLoader()
+
+_loaders: Dict[str, QueryLoader] = {focus_queries.version: focus_queries}
+
+
+def queries_for(version: Optional[str] = None) -> QueryLoader:
+    """The collection for a FOCUS version, loaded once per process."""
+    key = str(version).lstrip("v") if version else config.FOCUS_VERSION
+    loader = _loaders.get(key)
+    if loader is None:
+        loader = _loaders[key] = QueryLoader(key)
+    return loader
