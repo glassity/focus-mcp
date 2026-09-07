@@ -15,7 +15,11 @@ bucket. Resolution order:
    only with FOCUS_ALLOW_RAW_LOCATIONS, because there the handle travels in
    a header any intermediary can see.
 
-Connections are pooled per resolved location and credential. A location's
+A handle may name more than one location: a request repeats it once per
+location, and the dataset is the union of them. Each location carries its
+own region, because one dataset can span buckets in different ones.
+
+Connections are pooled per resolved dataset and credential. A dataset's
 view is rebuilt after VIEW_MAX_AGE_SECONDS so later deliveries show up, and
 the least recently used connection is closed once the pool is full.
 """
@@ -25,8 +29,8 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from dataclasses import dataclass
-from typing import Mapping, Optional
+from dataclasses import dataclass, replace
+from typing import Mapping, Optional, Sequence
 
 import duckdb
 
@@ -51,16 +55,45 @@ CREDENTIAL_HEADERS = {
 
 HANDLE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
+# What follows "@" on a dataset entry: a FOCUS version if it reads as a
+# number, otherwise the region the location lives in. Versions are digits
+# and dots; no region is.
+VERSION_SUFFIX_RE = re.compile(r"^v?\d+(?:\.\d+)*$")
+
 
 class DatasetError(Exception):
     """The dataset could not be resolved; the message is safe to show a client."""
 
 
 @dataclass(frozen=True)
+class Location:
+    """One place a dataset's Parquet lives, and the region to read it in."""
+
+    uri: str
+    region: str = ""
+
+
+@dataclass(frozen=True)
 class Dataset:
-    location: str
+    """One or more locations read as a single table, at one FOCUS version.
+
+    Order matters: where two locations hold the same billing period, the
+    later one wins.
+    """
+
+    locations: tuple[Location, ...]
     version: str
     handle: Optional[str] = None
+
+    @classmethod
+    def at(cls, uri: str, version: str, handle: Optional[str] = None, region: str = "") -> "Dataset":
+        """A dataset of a single location, which is what most of them are."""
+        return cls((Location(uri, region),), version, handle)
+
+    @property
+    def location(self) -> str:
+        """The first location, which names the dataset in messages."""
+        return self.locations[0].uri if self.locations else ""
 
     @property
     def label(self) -> str:
@@ -95,9 +128,13 @@ class RequestScope:
     def from_headers(cls, headers: Optional[Mapping[str, str]], default_version: str) -> "RequestScope":
         """Parse X-Focus-Datasets / X-Focus-Version / X-Aws-* headers.
 
-        X-Focus-Datasets is a comma-separated list of ``name=location`` pairs,
-        optionally ``name=location@version``; the first entry is the default
-        dataset. Header names are matched case-insensitively.
+        X-Focus-Datasets is a comma-separated list of ``name=location``
+        pairs, optionally ``name=location@region`` or
+        ``name=location@version``; the first entry is the default dataset.
+        A name may repeat, once per location, and those locations are read
+        as one dataset in the order they are listed. The version comes from
+        the first entry that names one; the rest only add locations. Header
+        names are matched case-insensitively.
         """
         if not headers:
             return cls({})
@@ -114,14 +151,22 @@ class RequestScope:
                 raise DatasetError(
                     f"{DATASETS_HEADER} entries look like name=location; {item!r} does not."
                 )
-            location, _, entry_version = target.strip().partition("@")
-            if not looks_like_location(location):
+            uri, _, suffix = target.strip().partition("@")
+            uri = uri.strip()
+            suffix = suffix.strip()
+            if not looks_like_location(uri):
                 raise DatasetError(f"Dataset {name!r} has no readable location.")
-            datasets[name] = Dataset(
-                config._resolve_location(location),
-                _normalize_version(entry_version, version),
-                name,
-            )
+            entry_version = suffix if VERSION_SUFFIX_RE.match(suffix) else ""
+            location = Location(config._resolve_location(uri), "" if entry_version else suffix)
+            existing = datasets.get(name)
+            if existing:
+                datasets[name] = replace(existing, locations=existing.locations + (location,))
+            else:
+                datasets[name] = Dataset(
+                    (location,),
+                    _normalize_version(entry_version, version),
+                    name,
+                )
 
         credentials = None
         key_id = lowered.get(CREDENTIAL_HEADERS["key_id"], "").strip()
@@ -184,24 +229,24 @@ class Catalog:
                 raise DatasetError(
                     f"Unknown dataset {handle!r}. This request may read: {', '.join(scope.datasets)}."
                 )
-            return Dataset(entry.location, _normalize_version(version, entry.version), name)
+            return Dataset(entry.locations, _normalize_version(version, entry.version), name)
 
         if not handle:
-            return Dataset(
+            return Dataset.at(
                 self.default_location,
                 _normalize_version(version, self.default_version),
             )
 
         entry = self.datasets.get(handle)
         if entry is not None:
-            return Dataset(
+            return Dataset.at(
                 entry["location"],
                 _normalize_version(version, entry.get("version") or self.default_version),
                 handle,
             )
 
         if self.allow_raw_locations and looks_like_location(handle):
-            return Dataset(
+            return Dataset.at(
                 config._resolve_location(handle),
                 _normalize_version(version, self.default_version),
                 handle,
@@ -214,32 +259,59 @@ class Catalog:
 @dataclass
 class Connection:
     conn: duckdb.DuckDBPyConnection
-    location: str
+    locations: tuple[Location, ...]
+    # The locations the view was actually built from: the ones that hold
+    # data, which for a local path means the ones that exist.
+    sources: tuple[str, ...]
     # How focus_data_table was built: "manifest" reads an export's own
     # delivery manifests, the glob strategies read every Parquet file under
-    # the location. None means no data was found.
+    # the location, and a dataset of several locations joins theirs with
+    # "+". None means no data was found.
     strategy: Optional[str]
     built_at: float
 
+    @property
+    def location(self) -> str:
+        return self.locations[0].uri if self.locations else ""
+
+
+def _normalized(locations: "str | Sequence[Location]") -> tuple[Location, ...]:
+    """Locations in the canonical form the pool keys and reads them by."""
+    if isinstance(locations, str):
+        locations = [Location(locations)]
+    return tuple(
+        Location(resolve_backend(item.uri).normalize(item.uri).rstrip("/"), item.region)
+        for item in locations
+    )
+
 
 class ConnectionPool:
-    """One prepared DuckDB connection per (location, credential), least recently used evicted."""
+    """One prepared DuckDB connection per (dataset, credential), least recently used evicted."""
 
     def __init__(self, max_size: Optional[int] = None):
         self.max_size = max(1, config.MAX_DATASETS if max_size is None else max_size)
         self._entries: "OrderedDict[tuple[str, str], Connection]" = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, location: str, credentials: Optional[Credentials] = None) -> Connection:
+    def get(
+        self,
+        locations: "str | Sequence[Location]",
+        credentials: Optional[Credentials] = None,
+    ) -> Connection:
         # Keyed on the normalized form so "s3://b/p" and "s3://b/p/" share
-        # one connection instead of loading the same data twice. Rotated
-        # keys get a fresh connection; the old one ages out of the pool.
-        location = resolve_backend(location).normalize(location).rstrip("/")
-        key = (location, credentials.key_id if credentials else "")
+        # one connection instead of loading the same data twice. The whole
+        # list is part of the key: the same locations in another order are
+        # another dataset, because order decides overlaps. Rotated keys get
+        # a fresh connection; the old one ages out of the pool.
+        locations = _normalized(locations)
+        key = (
+            "\n".join(f"{item.uri}@{item.region}" for item in locations),
+            credentials.key_id if credentials else "",
+        )
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
-                entry = self._open(location, credentials)
+                entry = self._open(locations, credentials)
                 self._entries[key] = entry
                 while len(self._entries) > self.max_size:
                     _, evicted = self._entries.popitem(last=False)
@@ -250,26 +322,37 @@ class ConnectionPool:
                     self._refresh(entry)
             return entry
 
-    def _open(self, location: str, credentials: Optional[Credentials]) -> Connection:
+    def _open(
+        self, locations: tuple[Location, ...], credentials: Optional[Credentials]
+    ) -> Connection:
         conn = duckdb.connect()
-        backend = resolve_backend(location)
-        # prepare() loads extensions and credentials and returns an error
-        # hint to surface if reads fail later.
-        hint = backend.prepare(conn, location, credentials)
+        hints: list[str] = []
+        sources: list[str] = []
+        for location in locations:
+            backend = resolve_backend(location.uri)
+            # prepare() loads extensions and credentials and returns an
+            # error hint to surface if reads fail later. Every location is
+            # prepared, including ones with no data yet, so its keys are on
+            # the connection once it does have data.
+            hint = backend.prepare(conn, location.uri, credentials, location.region)
+            if hint:
+                hints.append(hint)
+            if backend.exists(location.uri):
+                sources.append(location.uri)
 
         strategy = None
-        if backend.exists(location):
+        if sources:
             try:
-                strategy = create_focus_view(conn, location)
+                strategy = create_focus_view(conn, sources)
             except Exception as e:
                 # Nothing is cached on failure, so the next call retries and
                 # raises again instead of handing out a viewless connection
                 # that fails with a catalog error.
                 conn.close()
-                if hint:
-                    raise RuntimeError(f"{e} ({hint})") from e
+                if hints:
+                    raise RuntimeError(f"{e} ({'; '.join(dict.fromkeys(hints))})") from e
                 raise
-        return Connection(conn, location, strategy, time.monotonic())
+        return Connection(conn, locations, tuple(sources), strategy, time.monotonic())
 
     def _refresh(self, entry: Connection) -> None:
         # A failed refresh keeps the working view in place and is retried
@@ -277,7 +360,7 @@ class ConnectionPool:
         # down a server that is serving data fine.
         entry.built_at = time.monotonic()
         try:
-            entry.strategy = create_focus_view(entry.conn, entry.location)
+            entry.strategy = create_focus_view(entry.conn, list(entry.sources))
         except Exception as e:
             logger.warning("Keeping the loaded data: reloading it from %s failed: %s", entry.location, e)
 

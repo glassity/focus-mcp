@@ -8,7 +8,14 @@ sent - are honoured.
 
 import pytest
 
-from focus_mcp.datasets import Catalog, Credentials, Dataset, DatasetError, RequestScope
+from focus_mcp.datasets import (
+    Catalog,
+    Credentials,
+    Dataset,
+    DatasetError,
+    Location,
+    RequestScope,
+)
 
 
 def make_catalog(**overrides):
@@ -23,7 +30,7 @@ def make_catalog(**overrides):
 
 
 def test_no_handle_means_the_process_default():
-    assert make_catalog().resolve() == Dataset("/srv/focus/default", "1.0")
+    assert make_catalog().resolve() == Dataset.at("/srv/focus/default", "1.0")
 
 
 def test_version_override_applies_to_the_default_and_drops_the_v_prefix():
@@ -32,7 +39,7 @@ def test_version_override_applies_to_the_default_and_drops_the_v_prefix():
 
 def test_static_datasets_resolve_by_name_with_their_own_version():
     catalog = make_catalog(datasets={"prod": {"location": "s3://lake/focus/prod", "version": "1.2"}})
-    assert catalog.resolve("prod") == Dataset("s3://lake/focus/prod", "1.2", "prod")
+    assert catalog.resolve("prod") == Dataset.at("s3://lake/focus/prod", "1.2", "prod")
     # an explicit version still wins over the dataset's own
     assert catalog.resolve("prod", "1.1").version == "1.1"
 
@@ -70,7 +77,7 @@ def test_request_datasets_come_from_the_header_in_order():
     scope = scope_of(**{"X-Focus-Datasets": "all=s3://lake/focus/t-5/, proxy=s3://lake/focus/t-5/proxy/@1.1"})
     assert list(scope.datasets) == ["all", "proxy"]
     assert scope.default == "all"
-    assert scope.datasets["all"] == Dataset("s3://lake/focus/t-5/", "1.0", "all")
+    assert scope.datasets["all"] == Dataset.at("s3://lake/focus/t-5/", "1.0", "all")
     assert scope.datasets["proxy"].version == "1.1"
 
 
@@ -116,3 +123,44 @@ def test_credentials_are_read_from_headers_and_never_printed():
 def test_half_a_credential_is_an_error():
     with pytest.raises(DatasetError, match="both"):
         scope_of(**{"x-aws-access-key-id": "AKIA"})
+
+
+def test_a_location_may_carry_its_own_region():
+    scope = scope_of(**{"x-focus-datasets": (
+        "lake=s3://billing-lake/focus/@eu-west-1, plain=s3://billing-lake/other/"
+    )})
+    assert scope.datasets["lake"].locations == (Location("s3://billing-lake/focus/", "eu-west-1"),)
+    # No region of its own: X-Aws-Region, the session default, applies
+    assert scope.datasets["plain"].locations == (Location("s3://billing-lake/other/", ""),)
+
+
+def test_a_numeric_suffix_is_a_version_not_a_region():
+    scope = scope_of(**{"x-focus-datasets": "archive=s3://billing-lake/focus-2025/@1.0"})
+    assert scope.datasets["archive"].version == "1.0"
+    assert scope.datasets["archive"].locations[0].region == ""
+
+
+def test_a_repeated_handle_is_one_dataset_of_several_locations():
+    scope = scope_of(**{"x-focus-datasets": (
+        "aws-123456789012=s3://billing-lake/converted/@eu-west-1, "
+        "aws-123456789012=s3://customer-exports/focus/data/@us-east-1"
+    )})
+    assert list(scope.datasets) == ["aws-123456789012"]
+    assert scope.datasets["aws-123456789012"].locations == (
+        Location("s3://billing-lake/converted/", "eu-west-1"),
+        Location("s3://customer-exports/focus/data/", "us-east-1"),
+    )
+
+
+def test_the_first_entry_of_a_repeated_handle_sets_the_version():
+    scope = scope_of(**{"x-focus-datasets": "a=s3://one/@1.2, a=s3://two/"})
+    assert scope.datasets["a"].version == "1.2"
+    assert len(scope.datasets["a"].locations) == 2
+
+
+def test_resolving_a_repeated_handle_keeps_every_location():
+    scope = scope_of(**{"x-focus-datasets": "a=s3://one/, a=s3://two/"})
+    resolved = make_catalog().resolve("a", scope=scope)
+    assert resolved.locations == (Location("s3://one/"), Location("s3://two/"))
+    # The first location is what names the dataset in messages
+    assert resolved.location == "s3://one/"

@@ -168,3 +168,33 @@ def test_view_failure_is_not_cached(tmp_path, pool):
     write_parquet(tmp_path)
     conn = pool.get(str(tmp_path)).conn
     assert conn.execute("SELECT count(*) FROM focus_data_table").fetchone() == (2,)
+
+
+def test_a_dataset_of_two_locations_gets_one_connection(tmp_path, pool):
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_parquet(a, providers=("AWS",))
+    write_parquet(b, providers=("GCP", "Azure"))
+    locations = [datasets.Location(str(a)), datasets.Location(str(b))]
+    entry = pool.get(locations)
+    assert entry.conn.execute("SELECT count(*) FROM focus_data_table").fetchone()[0] == 3
+    assert pool.get(locations) is entry
+    assert len(pool) == 1
+
+
+def test_the_same_locations_in_another_order_are_another_dataset(tmp_path, pool):
+    # Order decides which location wins an overlapping period, so it is
+    # part of what a pooled connection is
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_parquet(a, providers=("AWS",))
+    write_parquet(b, providers=("GCP",))
+    forwards = [datasets.Location(str(a)), datasets.Location(str(b))]
+    assert pool.get(forwards) is not pool.get(list(reversed(forwards)))
+    assert len(pool) == 2
+
+
+def test_a_location_with_no_data_yet_does_not_hide_the_others(tmp_path, pool):
+    here, missing = tmp_path / "here", tmp_path / "missing"
+    write_parquet(here, providers=("AWS",))
+    entry = pool.get([datasets.Location(str(missing)), datasets.Location(str(here))])
+    assert entry.conn.execute("SELECT count(*) FROM focus_data_table").fetchone()[0] == 1
+    assert entry.sources == (str(here),)

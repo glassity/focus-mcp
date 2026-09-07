@@ -192,7 +192,13 @@ def test_get_data_info_survives_the_provider_rename(version, conn, monkeypatch):
     from focus_mcp.datasets import Connection
 
     build_table(conn, version)
-    monkeypatch.setattr(server.pool, "get", lambda location, credentials=None: Connection(conn, location, "glob", 0.0))
+    monkeypatch.setattr(
+        server.pool,
+        "get",
+        lambda locations, credentials=None: Connection(
+            conn, tuple(locations), tuple(item.uri for item in locations), "glob", 0.0
+        ),
+    )
     result = asyncio.run(server.get_data_info())
     assert "error" not in result, f"FOCUS {version}: {result['error']}"
     summary = result["result"]

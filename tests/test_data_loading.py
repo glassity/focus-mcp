@@ -363,3 +363,113 @@ def test_hive_mismatch_retry_unions_differing_schemas(conn, tmp_path):
 def test_glob_failure_propagates(conn, tmp_path):
     with pytest.raises(duckdb.Error):
         create_focus_view(conn, str(tmp_path))
+
+
+# --- several locations, one view ---
+
+def write_sql(path, select):
+    """Write the result of a SELECT to a Parquet file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    c = duckdb.connect()
+    c.execute(f"COPY ({select}) TO '{path}' (FORMAT parquet)")
+    c.close()
+
+
+def write_month(path, period, rows):
+    """Write rows of (ProviderName, BilledCost) stamped with a billing period."""
+    values = ", ".join(f"('{p}', {cost})" for p, cost in rows)
+    write_sql(path, f"""
+        SELECT TIMESTAMP '{period}-01' AS BillingPeriodStart, *
+        FROM (VALUES {values}) AS t(ProviderName, BilledCost)
+    """)
+
+
+def costs_by_period(conn):
+    return conn.execute("""
+        SELECT strftime(BillingPeriodStart, '%Y-%m'), sum(BilledCost)
+        FROM focus_data_table GROUP BY 1 ORDER BY 1
+    """).fetchall()
+
+
+def two_locations(tmp_path):
+    """Two locations of one dataset, overlapping on 2026-05.
+
+    They use the two partition layouts that turn up in practice, so the
+    view has to cope with both under one dataset.
+    """
+    earlier, later = tmp_path / "earlier", tmp_path / "later"
+    write_month(earlier / "year=2026/month=4/part.parquet", "2026-04", [("AWS", 1.0)])
+    write_month(earlier / "year=2026/month=5/part.parquet", "2026-05", [("AWS", 2.0)])
+    write_month(later / "data/BILLING_PERIOD=2026-05/part.parquet", "2026-05", [("AWS", 20.0)])
+    write_month(later / "data/BILLING_PERIOD=2026-06/part.parquet", "2026-06", [("AWS", 30.0)])
+    return str(earlier), str(later)
+
+
+def test_the_later_location_wins_a_period_both_hold(conn, tmp_path):
+    earlier, later = two_locations(tmp_path)
+    create_focus_view(conn, [earlier, later])
+    # 2026-05 is in both: only the later location's row for it survives
+    assert costs_by_period(conn) == [
+        ("2026-04", 1.0),
+        ("2026-05", 20.0),
+        ("2026-06", 30.0),
+    ]
+
+
+def test_the_order_of_the_locations_decides_who_wins(conn, tmp_path):
+    earlier, later = two_locations(tmp_path)
+    create_focus_view(conn, [later, earlier])
+    assert costs_by_period(conn) == [
+        ("2026-04", 1.0),
+        ("2026-05", 2.0),
+        ("2026-06", 30.0),
+    ]
+
+
+def test_locations_that_do_not_overlap_are_all_kept(conn, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    write_month(a / "year=2026/month=4/part.parquet", "2026-04", [("AWS", 1.0)])
+    write_month(b / "year=2026/month=5/part.parquet", "2026-05", [("AWS", 2.0)])
+    create_focus_view(conn, [str(a), str(b)])
+    assert costs_by_period(conn) == [("2026-04", 1.0), ("2026-05", 2.0)]
+
+
+def test_the_strategy_names_how_each_location_loaded(conn, tmp_path):
+    globbed = tmp_path / "globbed"
+    write_month(globbed / "year=2026/month=4/part.parquet", "2026-04", [("AWS", 1.0)])
+    exported = tmp_path / "exported"
+    write_period(exported, "billing_period=2026-05", [("AWS", 2.0)])
+    assert create_focus_view(conn, [str(globbed), str(exported)]) == "glob+manifest"
+
+
+def test_rows_without_a_billing_period_are_not_dropped(conn, tmp_path):
+    # NOT IN says nothing about NULL, so an unstamped row would vanish from
+    # the earlier location if the filter were written naively
+    earlier, later = tmp_path / "earlier", tmp_path / "later"
+    write_sql(
+        earlier / "part.parquet",
+        "SELECT NULL::TIMESTAMP AS BillingPeriodStart, 'AWS' AS ProviderName, 1.0 AS BilledCost",
+    )
+    write_month(earlier / "year=2026/month=5/part.parquet", "2026-05", [("AWS", 2.0)])
+    write_month(later / "year=2026/month=5/part.parquet", "2026-05", [("AWS", 20.0)])
+    create_focus_view(conn, [str(earlier), str(later)])
+    assert conn.execute(
+        "SELECT sum(BilledCost) FROM focus_data_table"
+    ).fetchone() == (21.0,)
+
+
+def test_a_location_without_the_period_column_is_left_alone(conn, tmp_path):
+    # A location that cannot say which months it holds cannot be
+    # superseded, and must not break the view for the ones that can
+    plain, stamped = tmp_path / "plain", tmp_path / "stamped"
+    write_parquet(plain / "part.parquet", [("AWS", 1.0)])
+    write_month(stamped / "year=2026/month=5/part.parquet", "2026-05", [("AWS", 2.0)])
+    create_focus_view(conn, [str(plain), str(stamped)])
+    assert conn.execute(
+        "SELECT sum(BilledCost) FROM focus_data_table"
+    ).fetchone() == (3.0,)
+
+
+def test_no_location_at_all_is_refused(conn):
+    with pytest.raises(ValueError, match="at least one location"):
+        create_focus_view(conn, [])

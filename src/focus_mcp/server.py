@@ -225,8 +225,16 @@ def resolve_dataset(ctx: Optional[Context], handle: str, version: str) -> Datase
 
 
 def get_db_connection(ctx: Optional[Context], dataset: Dataset) -> duckdb.DuckDBPyConnection:
-    """DuckDB connection with focus_data_table over the dataset's location."""
-    return pool.get(dataset.location, request_scope(ctx).credentials).conn
+    """DuckDB connection with focus_data_table over the dataset's locations."""
+    return pool.get(dataset.locations, request_scope(ctx).credentials).conn
+
+
+def described_locations(dataset: Dataset) -> list[dict[str, Any]]:
+    """Every location the dataset is read from, in the order they are read."""
+    return [
+        {"location": location.uri, "region": location.region or None}
+        for location in dataset.locations
+    ]
 
 
 def get_spec_loader() -> FocusSpecLoader:
@@ -301,7 +309,7 @@ async def get_data_info(
     try:
         scope = request_scope(ctx)
         selected = catalog.resolve(dataset, focus_version, scope=scope)
-        entry = pool.get(selected.location, scope.credentials)
+        entry = pool.get(selected.locations, scope.credentials)
         conn = entry.conn
 
         # Check if the focus_data_table view was successfully created
@@ -321,6 +329,7 @@ async def get_data_info(
                     "dataset": selected.handle,
                     "available_datasets": list(scope.datasets),
                     "data_location": selected.location,
+                    "locations": described_locations(selected),
                 }
             }
 
@@ -359,10 +368,15 @@ async def get_data_info(
                 "available_datasets": list(scope.datasets),
                 "focus_version": selected.version,
                 "data_location": selected.location,
+                # Every location this dataset unions, in reading order. A
+                # later one wins over an earlier one on billing periods
+                # they both cover.
+                "locations": described_locations(selected),
                 # How the files were picked: "manifest" reads an AWS
                 # export's own delivery manifests, the "glob" strategies
                 # read every Parquet file under the location and can
-                # double-count an export left behind on the prefix.
+                # double-count an export left behind on the prefix. A
+                # dataset of several locations joins theirs with "+".
                 "loading_strategy": entry.strategy,
                 "row_count": summary[0],
                 "date_range": {

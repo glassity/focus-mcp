@@ -27,20 +27,26 @@ def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture
-def sample(tmp_path):
-    """A one-row FOCUS export with the columns get_data_info summarises."""
-    directory = tmp_path / "sample" / "billing_period=2026-07"
+def write_month(root, period, cost):
+    """One billing period of a FOCUS export, with the columns get_data_info summarises."""
+    directory = root / f"billing_period={period}"
     directory.mkdir(parents=True)
     conn = duckdb.connect()
     conn.execute(f"""
         COPY (SELECT 'AWS' AS ProviderName, 'Amazon EC2' AS ServiceName,
-                     TIMESTAMP '2026-07-01' AS BillingPeriodStart, TIMESTAMP '2026-08-01' AS BillingPeriodEnd,
-                     12.5 AS BilledCost, 12.5 AS EffectiveCost)
+                     TIMESTAMP '{period}-01' AS BillingPeriodStart,
+                     TIMESTAMP '{period}-01' + INTERVAL 1 MONTH AS BillingPeriodEnd,
+                     {cost} AS BilledCost, {cost} AS EffectiveCost)
         TO '{directory}/part.parquet' (FORMAT parquet)
     """)
     conn.close()
-    return tmp_path / "sample"
+    return root.resolve()
+
+
+@pytest.fixture
+def sample(tmp_path):
+    """A one-row FOCUS export with the columns get_data_info summarises."""
+    return write_month(tmp_path / "sample", "2026-07", 12.5)
 
 
 def connect(url, **headers):
@@ -112,3 +118,23 @@ async def test_keys_are_pooled_per_request_not_shared(http_server, sample):
         await client.list_tools()
         await client.call_tool("get_data_info", {})
     assert sorted(key_id for _, key_id in server.pool._entries) == ["", "AKIA1"]
+
+
+async def test_a_handle_may_name_several_locations(http_server, tmp_path):
+    url, _ = http_server
+    earlier = write_month(tmp_path / "earlier", "2026-06", 5.0)
+    write_month(tmp_path / "earlier", "2026-07", 7.0)
+    later = write_month(tmp_path / "later", "2026-07", 70.0)
+    header = f"aws-123456789012={earlier}@eu-west-1, aws-123456789012={later}@us-east-1"
+    async with connect(url, **{"X-Focus-Datasets": header}) as client:
+        await client.list_tools()
+        info = json.loads((await client.call_tool("get_data_info", {})).content[0].text)["result"]
+        # One handle, whatever the number of locations behind it
+        assert info["available_datasets"] == ["aws-123456789012"]
+        assert info["locations"] == [
+            {"location": str(earlier), "region": "eu-west-1"},
+            {"location": str(later), "region": "us-east-1"},
+        ]
+        # July is in both locations; the later one is the one that counts
+        assert info["row_count"] == 2
+        assert float(info["total_cost"]) == 75.0

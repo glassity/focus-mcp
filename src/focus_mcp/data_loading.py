@@ -22,10 +22,17 @@ Two strategies, picked at view-creation time:
 
 Both strategies run over the connection the storage backend prepared, so
 they behave the same on local paths, s3:// and gs://.
+
+A dataset can name several locations. Each is read on its own - so two
+locations may use different strategies and different partition layouts
+without either disturbing the other - and focus_data_table is the union of
+them. Where two locations hold the same billing period the later one wins:
+the same month delivered twice would otherwise be counted twice.
 """
 
 import logging
 import re
+from typing import Optional, Sequence, Union
 
 import duckdb
 
@@ -35,6 +42,15 @@ logger = logging.getLogger(__name__)
 # of individual CREATE_NEW_REPORT executions live a level deeper, and the
 # sibling <export>-Manifest-FOCUS.json does not end in "Manifest.json".
 MANIFEST_GLOB = "{location}/metadata/*/*Manifest.json"
+
+# The view every tool reads, and the per-location views it unions when a
+# dataset has more than one location.
+FOCUS_VIEW = "focus_data_table"
+PART_VIEW = "focus_data_part_{index}"
+
+# FOCUS's own month column: the one thing two locations of the same dataset
+# are guaranteed to be able to overlap on.
+BILLING_PERIOD_COLUMN = "BillingPeriodStart"
 
 # AWS documents BILLING_PERIOD= but has delivered billing_period= too,
 # so both the discovery filter and the derived column ignore casing.
@@ -128,7 +144,7 @@ def collect_data_files(
     return list(dict.fromkeys(files))
 
 
-def manifest_view_sql(data_files: list[str]) -> str:
+def manifest_view_sql(data_files: list[str], view: str = FOCUS_VIEW) -> str:
     """View over an explicit file list, with billing_period derived.
 
     union_by_name absorbs schema drift between billing periods (FOCUS 1.0
@@ -137,7 +153,7 @@ def manifest_view_sql(data_files: list[str]) -> str:
     """
     file_list = ", ".join(_sql_literal(f) for f in data_files)
     return f"""
-        CREATE OR REPLACE VIEW focus_data_table AS
+        CREATE OR REPLACE VIEW {view} AS
         SELECT * EXCLUDE (filename), {BILLING_PERIOD_EXPR} AS billing_period
         FROM read_parquet(
             [{file_list}],
@@ -148,16 +164,18 @@ def manifest_view_sql(data_files: list[str]) -> str:
     """
 
 
-def glob_view_sql(location: str, hive_partitioning: bool) -> str:
+def glob_view_sql(location: str, hive_partitioning: bool, view: str = FOCUS_VIEW) -> str:
     """View over every Parquet file under the location.
 
+    The recursive pattern reads whatever layout the location uses, so a
+    partitioning scheme this server has never seen still loads.
     union_by_name absorbs schema drift between billing periods here for
     the same reason it does in manifest_view_sql.
     """
     pattern = _sql_literal(f"{location}/**/*.parquet")
     if hive_partitioning:
         return f"""
-            CREATE OR REPLACE VIEW focus_data_table AS
+            CREATE OR REPLACE VIEW {view} AS
             SELECT * FROM read_parquet(
                 {pattern}, union_by_name=true, hive_partitioning=true
             )
@@ -165,7 +183,7 @@ def glob_view_sql(location: str, hive_partitioning: bool) -> str:
     # Retry path: inference is off, so billing_period is derived from the
     # path instead of being dropped from the view.
     return f"""
-        CREATE OR REPLACE VIEW focus_data_table AS
+        CREATE OR REPLACE VIEW {view} AS
         SELECT * EXCLUDE (filename), {BILLING_PERIOD_EXPR} AS billing_period
         FROM read_parquet(
             {pattern},
@@ -187,7 +205,10 @@ def _is_readable(conn: duckdb.DuckDBPyConnection, path: str) -> bool:
 
 
 def _create_manifest_view(
-    conn: duckdb.DuckDBPyConnection, location: str, manifests: list[str]
+    conn: duckdb.DuckDBPyConnection,
+    location: str,
+    manifests: list[str],
+    view: str,
 ) -> str:
     """Create the view from the export's own manifests."""
     data_files = collect_data_files(conn, manifests, location)
@@ -205,7 +226,7 @@ def _create_manifest_view(
         len(data_files),
     )
     try:
-        conn.execute(manifest_view_sql(data_files))
+        conn.execute(manifest_view_sql(data_files, view))
     except duckdb.IOException as e:
         # A manifest outlives its data when a period is expired or cleaned
         # up by hand. Serve the periods that are left rather than nothing.
@@ -221,12 +242,14 @@ def _create_manifest_view(
             e,
             len(present),
         )
-        conn.execute(manifest_view_sql(present))
+        conn.execute(manifest_view_sql(present, view))
         return "manifest-partial"
     return "manifest"
 
 
-def _create_glob_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
+def _create_glob_view(
+    conn: duckdb.DuckDBPyConnection, location: str, view: str
+) -> str:
     """Create the view from every Parquet file under the location."""
     logger.info(
         "No export manifests under %s; loading every Parquet file "
@@ -234,7 +257,7 @@ def _create_glob_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
         location,
     )
     try:
-        conn.execute(glob_view_sql(location, hive_partitioning=True))
+        conn.execute(glob_view_sql(location, hive_partitioning=True, view=view))
     except duckdb.BinderException as e:
         if "hive partition" not in str(e).lower():
             raise
@@ -245,22 +268,108 @@ def _create_glob_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
             location,
             e,
         )
-        conn.execute(glob_view_sql(location, hive_partitioning=False))
+        conn.execute(glob_view_sql(location, hive_partitioning=False, view=view))
         return "glob-no-hive"
     return "glob"
 
 
-def create_focus_view(conn: duckdb.DuckDBPyConnection, location: str) -> str:
-    """Create the focus_data_table view over the data at the location.
+def create_location_view(
+    conn: duckdb.DuckDBPyConnection, location: str, view: str
+) -> str:
+    """Create one view over the data at one location.
 
     Returns the name of the strategy used, which callers surface: a glob
     over what turns out to be an export is the failure mode this module
     exists to avoid, and it is invisible otherwise.
+    """
+    manifests = discover_manifests(conn, location)
+    if manifests:
+        return _create_manifest_view(conn, location, manifests, view)
+    return _create_glob_view(conn, location, view)
+
+
+def billing_periods(
+    conn: duckdb.DuckDBPyConnection, view: str
+) -> Optional[set[str]]:
+    """The distinct billing periods in a view, or None if it has no column.
+
+    Compared as text, so a location that stores the month as a timestamp
+    and one that stores it as a string still line up. Rows without a month
+    are left out: they cannot be said to overlap anything.
+    """
+    columns = {row[0] for row in conn.execute(f"DESCRIBE {view}").fetchall()}
+    if BILLING_PERIOD_COLUMN not in columns:
+        return None
+    rows = conn.execute(
+        f"SELECT DISTINCT CAST({BILLING_PERIOD_COLUMN} AS VARCHAR) FROM {view}"
+        f" WHERE {BILLING_PERIOD_COLUMN} IS NOT NULL"
+    ).fetchall()
+    return {period for (period,) in rows}
+
+
+def union_view_sql(views: list[str], superseded: list[set[str]]) -> str:
+    """View over several location views, later ones winning on overlap.
+
+    ``superseded[i]`` holds the billing periods a later location already
+    covers, so the earlier location's rows for those months are filtered
+    out. The sets are computed once, when the view is built, and inlined
+    here: every query then pays only a comparison against a handful of
+    literals. UNION ALL BY NAME lines the locations up by column name, so
+    they need not share a schema.
+    """
+    selects = []
+    for view, periods in zip(views, superseded):
+        select = f"SELECT * FROM {view}"
+        if periods:
+            values = ", ".join(_sql_literal(p) for p in sorted(periods))
+            select += (
+                f" WHERE {BILLING_PERIOD_COLUMN} IS NULL"
+                f" OR CAST({BILLING_PERIOD_COLUMN} AS VARCHAR) NOT IN ({values})"
+            )
+        selects.append(select)
+    body = "\n            UNION ALL BY NAME\n            ".join(selects)
+    return f"""
+        CREATE OR REPLACE VIEW {FOCUS_VIEW} AS
+            {body}
+    """
+
+
+def create_focus_view(
+    conn: duckdb.DuckDBPyConnection, locations: Union[str, Sequence[str]]
+) -> str:
+    """Create the focus_data_table view over one or more locations.
+
+    Returns the strategy each location was loaded with, joined with "+".
 
     Errors propagate: the caller decides whether to attach a backend hint
     to them.
     """
-    manifests = discover_manifests(conn, location)
-    if manifests:
-        return _create_manifest_view(conn, location, manifests)
-    return _create_glob_view(conn, location)
+    if isinstance(locations, str):
+        locations = [locations]
+    locations = list(locations)
+    if not locations:
+        raise ValueError("A dataset needs at least one location")
+    if len(locations) == 1:
+        return create_location_view(conn, locations[0], FOCUS_VIEW)
+
+    views = []
+    strategies = []
+    for index, location in enumerate(locations):
+        view = PART_VIEW.format(index=index)
+        strategies.append(create_location_view(conn, location, view))
+        views.append(view)
+
+    periods = [billing_periods(conn, view) for view in views]
+    superseded = [
+        set().union(*(later or set() for later in periods[index + 1:]))
+        if periods[index] is not None
+        else set()
+        for index in range(len(views))
+    ]
+    logger.info(
+        "Unioning %d location(s); %d dropped as superseded",
+        len(views),
+        sum(1 for s in superseded if s),
+    )
+    conn.execute(union_view_sql(views, superseded))
+    return "+".join(strategies)
