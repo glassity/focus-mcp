@@ -49,7 +49,8 @@ Environment Variables:
                         indicator clients must request tokens for).
     FOCUS_REQUIRED_SCOPES: space-separated scopes a token must carry.
 
-    AWS_REGION: AWS region for S3 access
+    AWS_REGION: AWS region for S3 access, for locations that name none of
+                their own
                 Default: "us-east-1"
 
     AWS_PROFILE: Optional AWS profile for authentication

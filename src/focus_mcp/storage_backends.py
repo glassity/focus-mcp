@@ -11,6 +11,7 @@ DuckDB's default autoinstall/autoload of known extensions.
 Resolution walks BACKENDS in order; LocalBackend is the catch-all.
 """
 
+import hashlib
 import os
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
@@ -21,6 +22,16 @@ from . import config
 
 if TYPE_CHECKING:
     from .datasets import Credentials
+
+
+def secret_name(location: str) -> str:
+    """A secret name unique to one location.
+
+    A connection holds one secret per location of a dataset, so the names
+    cannot collide; the digest keeps them valid identifiers whatever the
+    location looks like.
+    """
+    return "focus_" + hashlib.sha256(location.encode()).hexdigest()[:16]
 
 
 class StorageBackend(ABC):
@@ -38,7 +49,11 @@ class StorageBackend(ABC):
 
     @abstractmethod
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        location: str,
+        credentials: "Optional[Credentials]" = None,
+        region: str = "",
     ) -> Optional[str]:
         """
         Load extensions and configure credentials on the connection.
@@ -46,6 +61,11 @@ class StorageBackend(ABC):
         ``credentials`` are keys the request brought along; a backend that
         can use them must scope them to ``location`` so a query cannot
         reach anything else with them.
+
+        ``region`` is the region that location lives in, when the caller
+        knows it. One connection can be prepared for several locations, so
+        whatever a backend configures has to be per location rather than
+        replace what the previous call set up.
 
         Returns an error hint to surface if reads later fail, or None
         when there is nothing useful to add.
@@ -76,13 +96,22 @@ class S3Backend(StorageBackend):
         return location.startswith("s3://")
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        location: str,
+        credentials: "Optional[Credentials]" = None,
+        region: str = "",
     ) -> Optional[str]:
         conn.execute("INSTALL httpfs; LOAD httpfs;")
+        scope = location if location.endswith("/") else location + "/"
+        # A dataset can span buckets in different regions, so the region
+        # belongs to each location's own secret rather than to the
+        # connection.
+        secret_region = region or (credentials.region if credentials else "") or config.AWS_REGION
         # Values are passed as bound parameters so no SQL escaping is needed
         if credentials:
-            conn.execute("""
-                CREATE OR REPLACE SECRET aws_s3_secret (
+            conn.execute(f"""
+                CREATE OR REPLACE SECRET {secret_name(location)} (
                     TYPE s3,
                     KEY_ID ?,
                     SECRET ?,
@@ -94,10 +123,21 @@ class S3Backend(StorageBackend):
                 credentials.key_id,
                 credentials.secret,
                 credentials.session_token,
-                credentials.region or config.AWS_REGION,
-                location if location.endswith("/") else location + "/",
+                secret_region,
+                scope,
             ])
             return "read with the credentials sent in this request"
+        conn.execute(f"""
+            CREATE OR REPLACE SECRET {secret_name(location)} (
+                TYPE s3,
+                PROVIDER credential_chain,
+                REGION ?,
+                SCOPE ?
+            )
+        """, [secret_region, scope])
+        # An unscoped fallback so ad-hoc SQL against a path outside the
+        # dataset still reaches the ambient credentials. Request keys get no
+        # such fallback: those stay on the prefix they were sent for.
         conn.execute("""
             CREATE OR REPLACE SECRET aws_s3_secret (
                 TYPE s3,
@@ -141,7 +181,11 @@ class GCSBackend(StorageBackend):
         return location
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        location: str,
+        credentials: "Optional[Credentials]" = None,
+        region: str = "",
     ) -> Optional[str]:
         key_id = os.getenv("GCS_HMAC_KEY_ID")
         secret = os.getenv("GCS_HMAC_SECRET")
@@ -183,7 +227,11 @@ class LocalBackend(StorageBackend):
         return True
 
     def prepare(
-        self, conn: duckdb.DuckDBPyConnection, location: str, credentials: "Optional[Credentials]" = None
+        self,
+        conn: duckdb.DuckDBPyConnection,
+        location: str,
+        credentials: "Optional[Credentials]" = None,
+        region: str = "",
     ) -> Optional[str]:
         return None
 
