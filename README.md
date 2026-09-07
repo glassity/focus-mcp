@@ -341,19 +341,50 @@ headers:
 
 | Header | Example | Meaning |
 | --- | --- | --- |
-| `X-Focus-Datasets` | `current=s3://billing/focus/, archive=s3://billing/focus-2025/@1.0` | Comma-separated `name=location`, optionally `@version`. The first entry is the default dataset. Only these names resolve for the request; the server's own `FOCUS_DATASETS` and default are not visible to it |
+| `X-Focus-Datasets` | `current=s3://billing-lake/focus/@eu-west-1, archive=s3://billing-lake/focus-2025/@1.0` | Comma-separated `name=location`, each optionally `@region` or `@version`. The first entry is the default dataset. A name may repeat, once per location, and those locations are read as one dataset. Only these names resolve for the request; the server's own `FOCUS_DATASETS` and default are not visible to it |
 | `X-Focus-Version` | `1.2` | FOCUS version for every dataset without its own `@version` |
-| `X-Aws-Access-Key-Id`, `X-Aws-Secret-Access-Key`, `X-Aws-Session-Token` | | AWS keys used for this request only, scoped to the dataset's location. Session token optional |
-| `X-Aws-Region` | `eu-west-1` | Bucket region; falls back to `AWS_REGION` |
+| `X-Aws-Access-Key-Id`, `X-Aws-Secret-Access-Key`, `X-Aws-Session-Token` | | AWS keys used for this request only, scoped to each of the dataset's locations. Session token optional |
+| `X-Aws-Region` | `eu-west-1` | Region for locations that carry no `@region` of their own; falls back to `AWS_REGION` |
+
+A suffix after `@` is read as a region unless it looks like a version
+number, so `@eu-west-1` sets the region and `@1.0` the FOCUS version.
 
 `get_data_info` reports `available_datasets` so the model knows what it may
-name. Keys never go into tool arguments, and the server never logs them.
+name, and `locations` so it can see what each one is made of. Keys never go
+into tool arguments, and the server never logs them.
+
+#### One handle, several locations
+
+Billing data for one thing is not always in one place: an export can move
+bucket, a backfill can be written somewhere other than where the provider
+delivers, and the two need not even be in the same region. Repeating a name
+puts them behind one handle:
+
+```
+archive=s3://billing-lake/archive/@eu-west-1, aws-123456789012=s3://billing-lake/aws-123456789012/@eu-west-1, aws-123456789012=s3://customer-exports/focus/data/@us-east-1
+```
+
+That is two datasets: `archive`, and `aws-123456789012` made of two
+locations. Reading it queries both, as one table, with the columns lined up
+by name so the locations need not share a schema.
+
+Where two locations of one handle hold the same billing period, the one
+listed **later** wins and the earlier one's rows for that period are
+dropped — otherwise a month held in both places would be counted twice. The
+comparison is on FOCUS's own `BillingPeriodStart`, and the periods each
+location covers are worked out once, when the view is built, so a query
+pays no more for a dataset of several locations than for one.
+
+Each location is read on its own, so two locations may use different
+partition layouts (`year=/month=` in one, `BILLING_PERIOD=` in the other)
+and different regions. Each gets its own credential scope, limited to its
+own prefix.
 
 With Claude Code that is one line:
 
 ```bash
 claude mcp add --transport http focus http://host:8000/mcp \
-  --header "X-Focus-Datasets: current=s3://billing/focus/" \
+  --header "X-Focus-Datasets: current=s3://billing-lake/focus/" \
   --header "X-Aws-Region: us-east-1" \
   --header "X-Aws-Access-Key-Id: AKIA…" \
   --header "X-Aws-Secret-Access-Key: …"
