@@ -473,3 +473,20 @@ def test_a_location_without_the_period_column_is_left_alone(conn, tmp_path):
 def test_no_location_at_all_is_refused(conn):
     with pytest.raises(ValueError, match="at least one location"):
         create_focus_view(conn, [])
+
+
+def test_a_location_with_no_files_yet_is_skipped(conn, tmp_path):
+    # A native export that is configured but has not delivered: the dataset
+    # is served from the locations that do have data
+    earlier, _ = two_locations(tmp_path)
+    pending = tmp_path / "pending"
+    pending.mkdir()
+    assert create_focus_view(conn, [earlier, str(pending)]) == "glob"
+    assert costs_by_period(conn) == [("2026-04", 1.0), ("2026-05", 2.0)]
+
+
+def test_locations_that_are_all_empty_are_an_error(conn, tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    with pytest.raises(duckdb.IOException, match="No files found"):
+        create_focus_view(conn, [str(tmp_path / "a"), str(tmp_path / "b")])

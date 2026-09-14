@@ -354,10 +354,28 @@ def create_focus_view(
 
     views = []
     strategies = []
+    empty: list[str] = []
     for index, location in enumerate(locations):
         view = PART_VIEW.format(index=index)
-        strategies.append(create_location_view(conn, location, view))
+        try:
+            strategies.append(create_location_view(conn, location, view))
+        except duckdb.IOException as e:
+            # An export that is configured but has not delivered yet, or a
+            # history prefix nothing was converted into. The dataset is the
+            # locations that do have data; only when none do is it an error.
+            if "no files found" not in str(e).lower():
+                raise
+            logger.warning("No data under %s yet; skipping it", location)
+            empty.append(location)
+            continue
         views.append(view)
+    if not views:
+        raise duckdb.IOException(
+            f"No files found under any of: {', '.join(locations)}"
+        )
+    if len(views) == 1:
+        conn.execute(f"CREATE OR REPLACE VIEW {FOCUS_VIEW} AS SELECT * FROM {views[0]}")
+        return strategies[0]
 
     periods = [billing_periods(conn, view) for view in views]
     superseded = [
