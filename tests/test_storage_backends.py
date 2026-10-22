@@ -13,11 +13,14 @@ import types
 import duckdb
 import pytest
 
+from focus_mcp import config
+from focus_mcp.datasets import Credentials
 from focus_mcp.storage_backends import (
     GCSBackend,
     LocalBackend,
     S3Backend,
     resolve_backend,
+    secret_name,
 )
 
 
@@ -38,6 +41,20 @@ def loaded_extensions(c):
 def secret_names(c):
     rows = c.execute("SELECT name FROM duckdb_secrets()").fetchall()
     return {r[0] for r in rows}
+
+
+def secret_scopes(c):
+    rows = c.execute("SELECT scope FROM duckdb_secrets()").fetchall()
+    return {tuple(r[0]) for r in rows}
+
+
+def secret_fields(c, location):
+    """The settings of the secret prepared for one location."""
+    row = c.execute(
+        "SELECT secret_string FROM duckdb_secrets() WHERE name = ?",
+        [secret_name(location)],
+    ).fetchone()
+    return dict(part.split("=", 1) for part in row[0].split(";"))
 
 
 class FakeConn:
@@ -166,3 +183,26 @@ def test_gcs_keyless_tier_returns_hint(conn, monkeypatch):
         "Application Default Credentials."
     )
     assert "httpfs" in loaded_extensions(conn)
+
+
+def test_request_keys_get_one_secret_per_location_and_never_an_open_one(conn):
+    # A dataset spans several locations, so their secrets cannot share a
+    # name; and a stray path outside them must not pick the keys up
+    keys = Credentials("AKIA", "secret", "", "us-east-1")
+    S3Backend().prepare(conn, "s3://one/prefix", keys)
+    S3Backend().prepare(conn, "s3://two/prefix", keys)
+    assert secret_scopes(conn) == {("s3://one/prefix/",), ("s3://two/prefix/",)}
+
+
+def test_a_location_region_beats_the_session_region(conn):
+    keys = Credentials("AKIA", "secret", "", "us-east-1")
+    S3Backend().prepare(conn, "s3://one/prefix", keys, region="eu-west-1")
+    S3Backend().prepare(conn, "s3://two/prefix", keys)
+    assert secret_fields(conn, "s3://one/prefix")["region"] == "eu-west-1"
+    # No region for this one: the session default it was sent with applies
+    assert secret_fields(conn, "s3://two/prefix")["region"] == "us-east-1"
+
+
+def test_without_any_request_region_the_configured_one_applies(conn):
+    S3Backend().prepare(conn, "s3://one/prefix")
+    assert secret_fields(conn, "s3://one/prefix")["region"] == config.AWS_REGION

@@ -301,12 +301,135 @@ Two methods exist because DuckDB's built-in GCS support only speaks HMAC; ADC
 comes from the optional `gcsfs` dependency. Credentials are only ever read
 inside the server process and are never exposed to MCP clients.
 
+## Many datasets, one server
+
+Every data tool takes an optional `dataset` handle and `focus_version`, so
+one process can answer for several exports: a chat can compare last year's
+FOCUS 1.0 archive with this month's 1.2 export without restarting anything.
+Leave both out and the server uses `FOCUS_DATA_LOCATION` / `FOCUS_VERSION`.
+
+Handles are names, not paths. The server resolves them in this order:
+
+1. Datasets the request itself declares (HTTP only, see below).
+
+2. `FOCUS_DATASETS`, a JSON map for self-hosted setups:
+
+   ```bash
+   export FOCUS_DATASETS='{
+     "archive": {"location": "s3://billing/focus-2025", "version": "1.0"},
+     "current": {"location": "s3://billing/focus", "version": "1.2"}
+   }'
+   ```
+
+3. Over stdio, a raw location (`s3://…`, `/path`) is accepted as a handle
+   too: the client is the same user as the server. Over HTTP it is refused
+   unless `FOCUS_ALLOW_RAW_LOCATIONS=true`, because there the handle rides in
+   a request header that intermediaries can read.
+
+### Running as a shared server
+
+```bash
+FOCUS_TRANSPORT=streamable-http FOCUS_HTTP_HOST=0.0.0.0 FOCUS_HTTP_PORT=8000 uvx focus-mcp
+```
+
+The endpoint is `http://host:8000/mcp`, Streamable HTTP, stateless: every
+request carries what it needs, so replicas can sit behind a plain load
+balancer and the process holds no per-tenant configuration.
+
+A request says what it may read, and brings the keys to read it with, in
+headers:
+
+| Header | Example | Meaning |
+| --- | --- | --- |
+| `X-Focus-Datasets` | `current=s3://billing-lake/focus/@eu-west-1, archive=s3://billing-lake/focus-2025/@1.0` | Comma-separated `name=location`, each optionally `@region` or `@version`. The first entry is the default dataset. A name may repeat, once per location, and those locations are read as one dataset. Only these names resolve for the request; the server's own `FOCUS_DATASETS` and default are not visible to it |
+| `X-Focus-Version` | `1.2` | FOCUS version for every dataset without its own `@version` |
+| `X-Aws-Access-Key-Id`, `X-Aws-Secret-Access-Key`, `X-Aws-Session-Token` | | AWS keys used for this request only, scoped to each of the dataset's locations. Session token optional |
+| `X-Aws-Region` | `eu-west-1` | Region for locations that carry no `@region` of their own; falls back to `AWS_REGION` |
+
+A suffix after `@` is read as a region unless it looks like a version
+number, so `@eu-west-1` sets the region and `@1.0` the FOCUS version.
+
+`get_data_info` reports `available_datasets` so the model knows what it may
+name, and `locations` so it can see what each one is made of. Keys never go
+into tool arguments, and the server never logs them.
+
+#### One handle, several locations
+
+Billing data for one thing is not always in one place: an export can move
+bucket, a backfill can be written somewhere other than where the provider
+delivers, and the two need not even be in the same region. Repeating a name
+puts them behind one handle:
+
+```
+archive=s3://billing-lake/archive/@eu-west-1, aws-123456789012=s3://billing-lake/aws-123456789012/@eu-west-1, aws-123456789012=s3://customer-exports/focus/data/@us-east-1
+```
+
+That is two datasets: `archive`, and `aws-123456789012` made of two
+locations. Reading it queries both, as one table, with the columns lined up
+by name so the locations need not share a schema.
+
+Where two locations of one handle hold the same billing period, the one
+listed **later** wins and the earlier one's rows for that period are
+dropped — otherwise a month held in both places would be counted twice. The
+comparison is on FOCUS's own `BillingPeriodStart`, and the periods each
+location covers are worked out once, when the view is built, so a query
+pays no more for a dataset of several locations than for one.
+
+Each location is read on its own, so two locations may use different
+partition layouts (`year=/month=` in one, `BILLING_PERIOD=` in the other)
+and different regions. Each gets its own credential scope, limited to its
+own prefix.
+
+With Claude Code that is one line:
+
+```bash
+claude mcp add --transport http focus http://host:8000/mcp \
+  --header "X-Focus-Datasets: current=s3://billing-lake/focus/" \
+  --header "X-Aws-Region: us-east-1" \
+  --header "X-Aws-Access-Key-Id: AKIA…" \
+  --header "X-Aws-Secret-Access-Key: …"
+```
+
+Hand the server short-lived keys where you can: an STS session whose
+policy allows only the prefix in `X-Focus-Datasets` means a leaked header
+buys one prefix for one hour. A service in front of the server (a chat
+backend, a gateway) can mint such keys per tenant and set the headers
+itself, which is how one server serves many tenants without storing any of
+their credentials.
+
+The `dataset` and `focus_version` parameters are declared with
+[`x-mcp-header`](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#x-mcp-header),
+so protocol 2026-07-28 clients mirror them into `Mcp-Param-Dataset` and
+`Mcp-Param-Focus-Version` headers and a gateway can route or meter by
+dataset without parsing the body. Older clients still work; the values just
+travel in the body only. Clients mirror them only after they have seen the
+tool schema: a `tools/call` sent before any `tools/list` is rejected by the
+server as a header/body mismatch (`-32020`), and the client is expected to
+list and retry.
+
+To require a bearer token on top, set `FOCUS_JWKS_URL`: tokens are JWTs and
+verified here against your identity provider's keys (install the `auth`
+extra: `uvx --from 'focus-mcp[auth]' focus-mcp`). `FOCUS_OIDC_ISSUER` pins
+the expected issuer, and `FOCUS_RESOURCE_URL` is this server's public URL —
+the audience tokens must name, and what the protected-resource metadata at
+`/.well-known/oauth-protected-resource/mcp` advertises. It defaults to the
+bind address, so set it behind a proxy.
+
 ## Configuration
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `FOCUS_DATA_LOCATION` | `data/focus-export` | Where the Parquet lives: a local path, `s3://…`, or `gs://…` |
-| `FOCUS_VERSION` | `1.0` | FOCUS specification version: `1.0`, `1.1`, `1.2`, `1.3` or `1.4`. Selects which query collection loads |
+| `FOCUS_VERSION` | `1.0` | FOCUS specification version of the default dataset: `1.0`, `1.1`, `1.2`, `1.3` or `1.4`. Selects which query collection loads |
+| `FOCUS_DATASETS` | (unset) | JSON map of dataset handles to `{location, version}`; see [Many datasets, one server](#many-datasets-one-server) |
+| `FOCUS_ALLOW_RAW_LOCATIONS` | `false` | Accept a location as the `dataset` over HTTP (always allowed over stdio) |
+| `FOCUS_MAX_DATASETS` | `8` | Open DuckDB connections kept at once; least recently used is closed beyond that |
+| `FOCUS_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
+| `FOCUS_HTTP_HOST` / `FOCUS_HTTP_PORT` | `127.0.0.1` / `8000` | Bind address for `streamable-http` |
+| `FOCUS_JWKS_URL` | (unset) | JWKS endpoint for verifying bearer tokens; unset means no authentication |
+| `FOCUS_OIDC_ISSUER` | (unset) | Expected token issuer, published as the authorization server |
+| `FOCUS_RESOURCE_URL` | (unset) | This server's URL: the audience tokens must be issued for |
+| `FOCUS_REQUIRED_SCOPES` | (unset) | Space-separated scopes a token must carry |
 | `AWS_REGION` | `us-east-1` | Region for S3 access |
 | `AWS_PROFILE` | (unset) | AWS profile for S3 authentication |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | (unset) | Static AWS credentials, if not using a role or profile |

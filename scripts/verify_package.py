@@ -111,29 +111,26 @@ def install_into_clean_venv(artifact: Path, venv: Path) -> Path:
 
 
 async def handshake(script: Path, cwd: Path) -> None:
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client import Client
+    from mcp.client.stdio import StdioServerParameters
 
     env = dict(os.environ)
     env["FOCUS_DATA_LOCATION"] = str(cwd / "no-such-data")
 
     params = StdioServerParameters(command=str(script), args=[], env=env, cwd=str(cwd))
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
+    async with Client(params) as client:
+        listed = await client.list_tools()
+        names = {tool.name for tool in listed.tools}
+        if not EXPECTED_TOOLS.issubset(names):
+            raise SystemExit(f"missing tools: {sorted(EXPECTED_TOOLS - names)}")
+        print(f"handshake OK, {len(names)} tools advertised")
 
-            listed = await session.list_tools()
-            names = {tool.name for tool in listed.tools}
-            if not EXPECTED_TOOLS.issubset(names):
-                raise SystemExit(f"missing tools: {sorted(EXPECTED_TOOLS - names)}")
-            print(f"handshake OK, {len(names)} tools advertised")
-
-            result = await session.call_tool("list_columns", {})
-            payload = json.loads(result.content[0].text)
-            total = payload.get("result", {}).get("total_columns", 0)
-            if total <= 0:
-                raise SystemExit(f"list_columns returned no columns: {payload}")
-            print(f"list_columns OK, {total} columns from a foreign working directory")
+        result = await client.call_tool("list_columns", {})
+        payload = json.loads(result.content[0].text)
+        total = payload.get("result", {}).get("total_columns", 0)
+        if total <= 0:
+            raise SystemExit(f"list_columns returned no columns: {payload}")
+        print(f"list_columns OK, {total} columns from a foreign working directory")
 
 
 def check_stdout_purity(script: Path, cwd: Path) -> None:
